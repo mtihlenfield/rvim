@@ -30,6 +30,7 @@ Small, mostly featureless, vim implementation in Rust. Just built for learning R
     - https://en.wikipedia.org/wiki/Command_pattern
     - Model View Update (TEA)
         - Model = buffer + mode + cursor position?
+            - is buffer window position (what part of the file we're showing) part of the model?
         - Top level View
             - child Window (only one for now)
                 - child: statusline
@@ -53,6 +54,5 @@ Small, mostly featureless, vim implementation in Rust. Just built for learning R
 - Going to need to handle signals. Does crossterm help with this?
 
 - Main loop listens for events, updates the model, and then passes that to the view
-- Could have a view trait with an update function:
 
 
