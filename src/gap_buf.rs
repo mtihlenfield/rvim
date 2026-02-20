@@ -49,11 +49,13 @@ impl GapBuffer {
     }
 
     pub fn grow_gap(&mut self, required_size: usize) {
-        // TODO: update this to use resize and copy_within
-        let current_gap_size = self.gap_end - self.gap_start;
-        let alloc_size = required_size + DEFAULT_GAP_SIZE - current_gap_size;
-        let new_gap = vec!['\0'; alloc_size];
-        self.buffer.splice(self.gap_start..self.gap_start, new_gap);
+        let alloc_size = required_size + DEFAULT_GAP_SIZE;
+        let old_size = self.buffer.len();
+
+        // This puts appends to the end
+        self.buffer.resize(old_size + alloc_size, '\0');
+        self.buffer
+            .copy_within(self.gap_end..old_size, self.gap_end + alloc_size);
         self.gap_end += alloc_size;
     }
 
@@ -180,12 +182,9 @@ mod tests {
         let start = "a".repeat(32);
         buf.insert(&start);
         assert_eq!(buf.to_string(), start);
-        println!("{:?}", buf);
 
         let more = "b".repeat(DEFAULT_GAP_SIZE);
         buf.insert_at(&more, 16);
-        println!("{:?}", buf);
-        // TODO: this is passing somehow but the buffer is messed up
         assert_eq!(buf.to_string(), "a".repeat(16) + &more + &"a".repeat(16));
     }
 
