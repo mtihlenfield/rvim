@@ -20,7 +20,7 @@ impl Position {
 }
 
 pub struct Buffer {
-    pub buf: gap_buf::GapBuffer,
+    buf: gap_buf::GapBuffer,
     pub cursor_position: Position,
 }
 
@@ -76,6 +76,7 @@ impl Model {
     pub fn handle_insert_update(&mut self, key_ev: event::KeyEvent) -> bool {
         match key_ev.code {
             event::KeyCode::Char(c) => {
+                // TODO: should probably ignore control chars
                 self.buffer.insert(c);
             }
             event::KeyCode::Backspace => {

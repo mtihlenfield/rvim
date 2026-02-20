@@ -1,5 +1,6 @@
 use crossterm::event;
-use log::info;
+use crossterm::terminal;
+use log::{info, warn};
 use log4rs;
 
 mod gap_buf;
@@ -9,7 +10,8 @@ mod screen;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     log4rs::init_file("config/log4rs.yaml", Default::default()).unwrap();
     info!("Starting rvim.");
-    let mut screen = screen::Screen::new();
+    let (width, height) = terminal::size()?;
+    let mut screen = screen::Screen::new(width, height);
     let mut model = model::Model::new();
     screen.update(&model)?;
 
@@ -23,7 +25,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 screen.update(&model)?;
             }
-            event::Event::Resize(cols, rows) => info!("Resized to {cols}x{rows}"),
+            event::Event::Resize(cols, rows) => {
+                screen.resize(cols, rows);
+                screen.update(&model)?;
+            }
             _ => {
                 screen.update(&model)?;
             }

@@ -1,8 +1,7 @@
-use crossterm::ExecutableCommand;
-use crossterm::cursor;
 use crossterm::terminal;
-use log::{info, warn};
-use std::io::{Write, stdout};
+use crossterm::{ExecutableCommand, QueueableCommand};
+use log::warn;
+use std::io::{Stdout, Write, stdout};
 
 use crate::model;
 
@@ -13,21 +12,11 @@ impl BufferView {
         BufferView {}
     }
 
-    pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
-        let mut out = stdout();
-        out.execute(cursor::MoveTo(0, 0))?;
-        write!(out, "{}", &new_model.buffer.buf.to_string())?;
-
-        info!("Writing: {}", &new_model.buffer.buf.to_string());
-        info!("position: {:?}", new_model.buffer.cursor_position);
-
-        out.execute(cursor::MoveTo(
-            new_model.buffer.cursor_position.col,
-            new_model.buffer.cursor_position.row,
-        ))?;
-
-        out.flush()?;
-
+    pub fn update(
+        &mut self,
+        screen_buf: &mut ScreenBuf,
+        new_model: &model::Model,
+    ) -> std::io::Result<()> {
         Ok(())
     }
 }
@@ -39,44 +28,81 @@ impl StatusView {
         StatusView {}
     }
 
-    pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
-        // let mut out = stdout();
+    pub fn update(
+        &mut self,
+        screen_buf: &mut ScreenBuf,
+        new_model: &model::Model,
+    ) -> std::io::Result<()> {
+        // TODO: add the buffer contents
+        Ok(())
+    }
+}
 
-        // match new_model.mode {
-        //     model::Mode::Insert => write!(out, "{}", "-- INSERT --")?,
-        //     _ => {}
-        // }
+struct ScreenBuf {
+    width: u16,
+    heigh: u16,
+    back: Vec<char>,
+    front: Vec<char>,
+}
 
-        // out.flush()?;
+impl ScreenBuf {
+    pub fn new(width: u16, height: u16) -> ScreenBuf {
+        ScreenBuf {
+            width: width,
+            heigh: height,
+            back: vec![' '; (width * height) as usize],
+            front: vec![' '; (width * height) as usize],
+        }
+    }
 
+    pub fn clear(&mut self) {
+        for c in &mut self.back {
+            *c = ' ';
+        }
+    }
+
+    pub fn write(&mut self, col: u16, row: u16, val: char) {}
+
+    pub fn flush(&self, out: &Stdout) -> std::io::Result<()> {
         Ok(())
     }
 }
 
 pub struct Screen {
+    screen_buf: ScreenBuf,
     buffer_view: BufferView,
     status_view: StatusView,
     initialized: bool,
 }
 
 impl Screen {
-    pub fn new() -> Screen {
+    pub fn new(width: u16, height: u16) -> Screen {
         Screen {
+            screen_buf: ScreenBuf::new(width, height),
             buffer_view: BufferView::new(),
             status_view: StatusView::new(),
             initialized: false,
         }
     }
 
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.screen_buf = ScreenBuf::new(width, height);
+    }
+
     pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
+        let mut out = stdout();
         if !self.initialized {
+            // TODO enter alt screen so we don't mess up the term history
             terminal::enable_raw_mode()?;
+            out.queue(terminal::Clear(terminal::ClearType::All))?;
             self.initialized = true;
         }
 
-        stdout().execute(terminal::Clear(terminal::ClearType::All))?;
-        self.buffer_view.update(new_model)?;
-        self.status_view.update(new_model)
+        self.screen_buf.clear();
+        self.buffer_view.update(&mut self.screen_buf, new_model)?;
+        self.status_view.update(&mut self.screen_buf, new_model)?;
+        self.screen_buf.flush(&out)?;
+        out.flush()
     }
 }
 
@@ -89,5 +115,7 @@ impl Drop for Screen {
         if let Err(_) = stdout().execute(terminal::Clear(terminal::ClearType::All)) {
             warn!("Failed to clear screen on close.")
         }
+
+        // TODO: exit alt screen
     }
 }
