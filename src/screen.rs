@@ -41,8 +41,8 @@ impl StatusView {
 struct ScreenBuf {
     width: u16,
     heigh: u16,
-    back: Vec<char>,
-    front: Vec<char>,
+    back: Vec<Vec<char>>,
+    front: Vec<Vec<char>>,
 }
 
 impl ScreenBuf {
@@ -50,20 +50,33 @@ impl ScreenBuf {
         ScreenBuf {
             width: width,
             heigh: height,
-            back: vec![' '; (width * height) as usize],
-            front: vec![' '; (width * height) as usize],
+            back: vec![vec![' '; width as usize]; height as usize],
+            front: vec![vec![' '; width as usize]; height as usize],
         }
     }
 
     pub fn clear(&mut self) {
-        for c in &mut self.back {
-            *c = ' ';
-        }
+        // TODO:
+        // for row in &mut self.back {
+        //     for c in &mut row {
+        //         *c = ' ';
+        //     }
+        // }
     }
 
     pub fn write(&mut self, col: u16, row: u16, val: char) {}
 
     pub fn flush(&self, out: &Stdout) -> std::io::Result<()> {
+        // TODO: look at some other editors and see how they handle this
+        // for row in 0..self.width {
+        //     // TODO: make sure this traversal is cache friendly
+        //     for row in 0..self.height {
+        //         for col in 0..self.width {
+        //             let front_col = self.front[row][col];
+        //             let back_col = self.back[row][col];
+        //         }
+        //     }
+        // }
         Ok(())
     }
 }
@@ -93,8 +106,10 @@ impl Screen {
         let mut out = stdout();
         if !self.initialized {
             // TODO enter alt screen so we don't mess up the term history
+
+            out.execute(terminal::EnterAlternateScreen)?;
+            out.execute(terminal::Clear(terminal::ClearType::All))?;
             terminal::enable_raw_mode()?;
-            out.queue(terminal::Clear(terminal::ClearType::All))?;
             self.initialized = true;
         }
 
@@ -109,13 +124,15 @@ impl Screen {
 impl Drop for Screen {
     fn drop(&mut self) {
         if let Err(_) = terminal::disable_raw_mode() {
-            warn!("Failed to disable raw mode on close.")
+            warn!("Failed to disable raw mode on close.");
         }
 
         if let Err(_) = stdout().execute(terminal::Clear(terminal::ClearType::All)) {
-            warn!("Failed to clear screen on close.")
+            warn!("Failed to clear screen on close.");
         }
 
-        // TODO: exit alt screen
+        if let Err(_) = stdout().execute(terminal::LeaveAlternateScreen) {
+            warn!("Failed to return to alt screen.");
+        }
     }
 }
