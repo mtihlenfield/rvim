@@ -7,6 +7,7 @@ pub enum Mode {
     // CommandLine,
 }
 
+#[derive(Debug)]
 pub struct Position {
     pub col: u16,
     pub row: u16,
@@ -34,6 +35,14 @@ impl Buffer {
     pub fn insert(&mut self, c: char) {
         self.buf.insert(&c.to_string());
         self.cursor_position.col += 1;
+    }
+
+    pub fn delete(&mut self) {
+        if let Ok(()) = self.buf.delete() {
+            // We should only get an Err back if we can't delete
+            // because we're at the start of the buffer
+            self.cursor_position.col -= 1;
+        }
     }
 }
 
@@ -68,8 +77,9 @@ impl Model {
         match key_ev.code {
             event::KeyCode::Char(c) => {
                 self.buffer.insert(c);
-                // insert in to buf
-                // move cursor
+            }
+            event::KeyCode::Backspace => {
+                self.buffer.delete();
             }
             event::KeyCode::Esc => {
                 self.mode = Mode::Normal;

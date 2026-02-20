@@ -28,7 +28,9 @@ impl GapBuffer {
 
     fn move_cursor(&mut self, pos: usize) -> Result<(), MoveError> {
         if pos > self.len() {
-            MoveError("Cannot move the gap buffer cursor past the data end.");
+            return Err(MoveError(
+                "Cannot move the gap buffer cursor past the data end.",
+            ));
         }
 
         let distance = pos.abs_diff(self.gap_start);
@@ -87,12 +89,14 @@ impl GapBuffer {
     }
 
     /// Delete at the current cursor position
-    pub fn delete(&mut self) {
+    pub fn delete(&mut self) -> Result<(), MoveError> {
         if self.gap_start == 0 {
-            panic!("Cannot delete from beginning of buffer.");
+            return Err(MoveError("Cannot delete from beginning of buffer."));
         }
 
         self.gap_start -= 1;
+
+        Ok(())
     }
 }
 
