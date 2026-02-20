@@ -1,5 +1,7 @@
+use std::format;
 const DEFAULT_GAP_SIZE: usize = 64;
 
+#[derive(Debug)]
 struct GapBuffer {
     buffer: Vec<char>,
     gap_start: usize,
@@ -12,33 +14,52 @@ impl GapBuffer {
             buffer: vec!['\0'; DEFAULT_GAP_SIZE],
             // index of the first writeable character in the gap
             gap_start: 0,
-            // index of the first char after the gap - could be after the end of the vec
+            // index of the char after the gap
             gap_end: DEFAULT_GAP_SIZE,
         }
     }
 
     pub fn len(&self) -> usize {
-        return self.buffer.len() - (self.gap_end - self.gap_start);
+        self.buffer.len() - (self.gap_end - self.gap_start)
     }
 
     fn move_cursor(&mut self, pos: usize) {
-        // how to handle it if the pos is beyond the end of the vec? Should probably fail right?
-    }
+        if pos > self.len() {
+            panic!("Cannot move the gap buffer cursor past the data end.");
+        }
 
-    fn grow(&mut self) {
-        // Grow the vector
-        let new_gap = vec!['\0'; DEFAULT_GAP_SIZE];
-        // Move the data at gap_start gap_size bytes to the right
-        // Adjust gap start and gap end
+        let distance = pos.abs_diff(self.gap_start);
+        match self.gap_start.cmp(&pos) {
+            std::cmp::Ordering::Less => {
+                for _ in 0..distance {
+                    self.buffer[self.gap_start] = self.buffer[self.gap_end];
+                    self.gap_start += 1;
+                    self.gap_end += 1;
+                }
+            }
+            std::cmp::Ordering::Greater => {
+                for _ in 0..distance {
+                    self.buffer[self.gap_end - 1] = self.buffer[self.gap_start - 1];
+                    self.gap_start -= 1;
+                    self.gap_end -= 1;
+                }
+            }
+            std::cmp::Ordering::Equal => return,
+        }
     }
 
     /// Insert at the current cursor position
     pub fn insert(&mut self, s: &str) {
-        for c in s.chars() {
-            if self.gap_start >= self.gap_end {
-                self.grow()
-            }
+        let current_gap_size = self.gap_end - self.gap_start;
+        let str_len = s.chars().count();
+        if current_gap_size < str_len {
+            let alloc_size = str_len + DEFAULT_GAP_SIZE - current_gap_size;
+            let new_gap = vec!['\0'; alloc_size];
+            self.buffer.splice(self.gap_start..self.gap_start, new_gap);
+            self.gap_end += alloc_size;
+        }
 
+        for c in s.chars() {
             self.buffer[self.gap_start] = c;
             self.gap_start += 1;
         }
@@ -52,28 +73,46 @@ impl GapBuffer {
 
     /// Delete at the current cursor position
     pub fn delete(&mut self) {
-        // TODO: what if gap_end = 0?
+        if self.gap_start == 0 {
+            panic!("Cannot delete from beginning of buffer.");
+        }
+
         self.gap_start -= 1;
     }
 }
 
-impl ToString for GapBuffer {
-    // Required method
-    fn to_string(&self) -> String {
-        let mut buf = self.buffer.clone();
-        buf.drain(self.gap_start..self.gap_end);
-        buf.into_iter().collect()
+impl std::fmt::Display for GapBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        for &c in &self.buffer[..self.gap_start] {
+            write!(f, "{}", c)?;
+        }
+
+        for &c in &self.buffer[self.gap_end..] {
+            write!(f, "{}", c)?;
+        }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::GapBuffer;
+    use super::*;
 
     #[test]
     fn test_insert_string_in_empty() {
         let mut buf = GapBuffer::new();
         let hello = String::from("Hello, world");
+        buf.insert(&hello);
+
+        assert_eq!(buf.len(), hello.len());
+        assert_eq!(buf.to_string(), hello);
+    }
+
+    #[test]
+    fn insert_fill_from_empty() {
+        let mut buf = GapBuffer::new();
+        let hello = "a".repeat(DEFAULT_GAP_SIZE);
         buf.insert(&hello);
 
         assert_eq!(buf.len(), hello.len());
@@ -94,12 +133,54 @@ mod tests {
     #[test]
     fn test_basic_insert_at() {
         let mut buf = GapBuffer::new();
-        buf.insert("Goodbye, world");
-        buf.insert_at("creul, ", 7);
+        buf.insert("Hello, world");
 
-        let cruel = String::from("Hello, world");
-        assert_eq!(buf.len(), cruel.len());
+        // Testing moving the cursor from the end to the middle of a string
+        buf.insert_at("cruel ", 7);
+
+        let cruel = String::from("Hello, cruel world");
         assert_eq!(buf.to_string(), cruel);
+
+        // Testing moving from the middle to the end of a string
+        buf.insert_at(".", 18);
+        let cruel = String::from("Hello, cruel world.");
+        assert_eq!(buf.to_string(), cruel);
+
+        // Moving from the end to the beginning
+        buf.insert_at("Goodbye ", 0);
+        let cruel = String::from("Goodbye Hello, cruel world.");
+        assert_eq!(buf.to_string(), cruel);
+
+        // inserting at 0 when cursor == 0;
+        buf.insert_at("Goodbye ", 0);
+        let cruel = String::from("Goodbye Goodbye Hello, cruel world.");
+        assert_eq!(buf.to_string(), cruel);
+    }
+
+    #[test]
+    fn test_insert_with_grow() {
+        let mut buf = GapBuffer::new();
+        let start = "a".repeat(DEFAULT_GAP_SIZE);
+        buf.insert(&start);
+        assert_eq!(buf.to_string(), start);
+
+        buf.insert(".");
+        assert_eq!(buf.to_string(), start + ".");
+    }
+
+    #[test]
+    fn test_insert_with_grow_in_middle() {
+        let mut buf = GapBuffer::new();
+        let start = "a".repeat(32);
+        buf.insert(&start);
+        assert_eq!(buf.to_string(), start);
+        println!("{:?}", buf);
+
+        let more = "b".repeat(DEFAULT_GAP_SIZE);
+        buf.insert_at(&more, 16);
+        println!("{:?}", buf);
+        // TODO: this is passing somehow but the buffer is messed up
+        assert_eq!(buf.to_string(), "a".repeat(16) + &more + &"a".repeat(16));
     }
 
     #[test]
