@@ -1,9 +1,10 @@
 const DEFAULT_GAP_SIZE: usize = 64;
 
+#[derive(Debug)]
 pub struct MoveError(&'static str);
 
 #[derive(Debug)]
-struct GapBuffer {
+pub struct GapBuffer {
     // TODO: using char means I'm using 4x memory than a u8...
     buffer: Vec<char>,
     gap_start: usize,
@@ -156,23 +157,23 @@ mod tests {
         buf.insert("Hello, world");
 
         // Testing moving the cursor from the end to the middle of a string
-        buf.insert_at("cruel ", 7);
+        buf.insert_at("cruel ", 7).expect("Should work");
 
         let cruel = String::from("Hello, cruel world");
         assert_eq!(buf.to_string(), cruel);
 
         // Testing moving from the middle to the end of a string
-        buf.insert_at(".", 18);
+        buf.insert_at(".", 18).expect("Should work");
         let cruel = String::from("Hello, cruel world.");
         assert_eq!(buf.to_string(), cruel);
 
         // Moving from the end to the beginning
-        buf.insert_at("Goodbye ", 0);
+        buf.insert_at("Goodbye ", 0).expect("Should work");
         let cruel = String::from("Goodbye Hello, cruel world.");
         assert_eq!(buf.to_string(), cruel);
 
         // inserting at 0 when cursor == 0;
-        buf.insert_at("Goodbye ", 0);
+        buf.insert_at("Goodbye ", 0).expect("Should work");
         let cruel = String::from("Goodbye Goodbye Hello, cruel world.");
         assert_eq!(buf.to_string(), cruel);
     }
@@ -196,7 +197,7 @@ mod tests {
         assert_eq!(buf.to_string(), start);
 
         let more = "b".repeat(DEFAULT_GAP_SIZE);
-        buf.insert_at(&more, 16);
+        buf.insert_at(&more, 16).expect("Should work");
         assert_eq!(buf.to_string(), "a".repeat(16) + &more + &"a".repeat(16));
     }
 

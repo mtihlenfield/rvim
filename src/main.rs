@@ -11,21 +11,17 @@ enum EventResult {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut screen = screen::Screen::new();
-    let buffer = model::Buffer {
-        buf: "hello, world".to_string(),
-        cursor_position: model::Position { col: 0, row: 0 },
-    };
-    let model = model::Model::new(buffer);
+    let mut model = model::Model::new();
     screen.update(&model)?;
 
     loop {
         let ev = event::read()?;
         match ev {
             event::Event::Key(key_event) => {
-                if key_event.code == event::KeyCode::Char('q') {
+                let should_exit = model.update(key_event);
+                if should_exit {
                     break;
                 }
-
                 screen.update(&model)?;
             }
             event::Event::Resize(cols, rows) => println!("Resized to {cols}x{rows}"),

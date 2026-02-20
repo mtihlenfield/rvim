@@ -22,22 +22,6 @@ impl BufferView {
     }
 }
 
-// struct WindowView {
-//     buffer: BufferView,
-// }
-//
-// impl WindowView {
-//     pub fn new() -> WindowView {
-//         WindowView {
-//             buffer: BufferView::new(),
-//         }
-//     }
-//
-//     pub fn update(&mut self, model: &Model) -> std::io::Result<()> {
-//         self.buffer.update(model)
-//     }
-// }
-
 pub struct Screen {
     buffer_view: BufferView,
     initialized: bool,

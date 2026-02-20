@@ -1,7 +1,10 @@
-enum Mode {
+use crate::gap_buf;
+use crossterm::event;
+
+pub enum Mode {
     Normal,
     Insert,
-    CommandLine,
+    // CommandLine,
 }
 
 pub struct Position {
@@ -9,33 +12,78 @@ pub struct Position {
     pub row: u16,
 }
 
+impl Position {
+    pub fn new() -> Position {
+        Position { col: 0, row: 0 }
+    }
+}
+
 pub struct Buffer {
-    pub buf: String,
+    pub buf: gap_buf::GapBuffer,
     pub cursor_position: Position,
 }
 
 impl Buffer {
-    pub fn insert(self, c: char, pos: Position) -> Buffer {
-        self
+    pub fn new() -> Buffer {
+        Buffer {
+            buf: gap_buf::GapBuffer::new(),
+            cursor_position: Position::new(),
+        }
     }
 
-    pub fn delete(self, pos: Position) -> Buffer {
-        self
+    pub fn insert(&mut self, c: char) {
+        self.buf.insert(&c.to_string());
+        self.cursor_position.col += 1;
     }
 }
 
 pub struct Model {
-    // TODO: I want to use larger ints for the cursor, but I need to handle wraparound
-    // in the buffer first
     pub buffer: Buffer,
     pub mode: Mode,
 }
 
 impl Model {
-    pub fn new(buffer: Buffer) -> Model {
+    pub fn new() -> Model {
         Model {
             mode: Mode::Normal,
-            buffer: buffer,
+            buffer: Buffer::new(),
+        }
+    }
+
+    pub fn handle_normal_update(&mut self, key_ev: event::KeyEvent) -> bool {
+        match key_ev.code {
+            event::KeyCode::Char(c) => match c {
+                'q' => true,
+                'i' => {
+                    self.mode = Mode::Insert;
+                    false
+                }
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    pub fn handle_insert_update(&mut self, key_ev: event::KeyEvent) -> bool {
+        match key_ev.code {
+            event::KeyCode::Char(c) => {
+                self.buffer.insert(c);
+                // insert in to buf
+                // move cursor
+            }
+            event::KeyCode::Esc => {
+                self.mode = Mode::Normal;
+            }
+            _ => {}
+        };
+
+        false
+    }
+
+    pub fn update(&mut self, key_ev: event::KeyEvent) -> bool {
+        match self.mode {
+            Mode::Normal => self.handle_normal_update(key_ev),
+            Mode::Insert => self.handle_insert_update(key_ev),
         }
     }
 }
