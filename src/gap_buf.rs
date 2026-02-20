@@ -1,8 +1,10 @@
-use std::format;
 const DEFAULT_GAP_SIZE: usize = 64;
+
+pub struct MoveError(&'static str);
 
 #[derive(Debug)]
 struct GapBuffer {
+    // TODO: using char means I'm using 4x memory than a u8...
     buffer: Vec<char>,
     gap_start: usize,
     gap_end: usize,
@@ -23,9 +25,9 @@ impl GapBuffer {
         self.buffer.len() - (self.gap_end - self.gap_start)
     }
 
-    fn move_cursor(&mut self, pos: usize) {
+    fn move_cursor(&mut self, pos: usize) -> Result<(), MoveError> {
         if pos > self.len() {
-            panic!("Cannot move the gap buffer cursor past the data end.");
+            MoveError("Cannot move the gap buffer cursor past the data end.");
         }
 
         let distance = pos.abs_diff(self.gap_start);
@@ -44,8 +46,10 @@ impl GapBuffer {
                 self.gap_start -= distance;
                 self.gap_end -= distance;
             }
-            std::cmp::Ordering::Equal => return,
-        }
+            std::cmp::Ordering::Equal => return Ok(()),
+        };
+
+        Ok(())
     }
 
     pub fn grow_gap(&mut self, required_size: usize) {
@@ -74,9 +78,11 @@ impl GapBuffer {
     }
 
     /// Insert at a new location in the buffer
-    pub fn insert_at(&mut self, s: &str, pos: usize) {
-        self.move_cursor(pos);
+    pub fn insert_at(&mut self, s: &str, pos: usize) -> Result<(), MoveError> {
+        self.move_cursor(pos)?;
         self.insert(s);
+
+        Ok(())
     }
 
     /// Delete at the current cursor position
@@ -86,6 +92,12 @@ impl GapBuffer {
         }
 
         self.gap_start -= 1;
+    }
+}
+
+impl Default for GapBuffer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
