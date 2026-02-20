@@ -31,21 +31,30 @@ impl GapBuffer {
         let distance = pos.abs_diff(self.gap_start);
         match self.gap_start.cmp(&pos) {
             std::cmp::Ordering::Less => {
-                for _ in 0..distance {
-                    self.buffer[self.gap_start] = self.buffer[self.gap_end];
-                    self.gap_start += 1;
-                    self.gap_end += 1;
-                }
+                self.buffer
+                    .copy_within(self.gap_end..self.gap_end + distance, self.gap_start);
+                self.gap_start += distance;
+                self.gap_end += distance;
             }
             std::cmp::Ordering::Greater => {
-                for _ in 0..distance {
-                    self.buffer[self.gap_end - 1] = self.buffer[self.gap_start - 1];
-                    self.gap_start -= 1;
-                    self.gap_end -= 1;
-                }
+                self.buffer.copy_within(
+                    self.gap_start - distance..self.gap_start,
+                    self.gap_end - distance,
+                );
+                self.gap_start -= distance;
+                self.gap_end -= distance;
             }
             std::cmp::Ordering::Equal => return,
         }
+    }
+
+    pub fn grow_gap(&mut self, required_size: usize) {
+        // TODO: update this to use resize and copy_within
+        let current_gap_size = self.gap_end - self.gap_start;
+        let alloc_size = required_size + DEFAULT_GAP_SIZE - current_gap_size;
+        let new_gap = vec!['\0'; alloc_size];
+        self.buffer.splice(self.gap_start..self.gap_start, new_gap);
+        self.gap_end += alloc_size;
     }
 
     /// Insert at the current cursor position
@@ -53,10 +62,7 @@ impl GapBuffer {
         let current_gap_size = self.gap_end - self.gap_start;
         let str_len = s.chars().count();
         if current_gap_size < str_len {
-            let alloc_size = str_len + DEFAULT_GAP_SIZE - current_gap_size;
-            let new_gap = vec!['\0'; alloc_size];
-            self.buffer.splice(self.gap_start..self.gap_start, new_gap);
-            self.gap_end += alloc_size;
+            self.grow_gap(str_len);
         }
 
         for c in s.chars() {
