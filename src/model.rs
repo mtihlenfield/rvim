@@ -20,6 +20,8 @@ impl Position {
     }
 }
 
+type BufferIter<'a> = gap_buf::GapBufferIter<'a>;
+
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
     pub cursor_position: Position,
@@ -44,6 +46,10 @@ impl Buffer {
             // because we're at the start of the buffer
             self.cursor_position.col -= 1;
         }
+    }
+
+    pub fn iter(&'_ self) -> BufferIter<'_> {
+        self.buf.iter()
     }
 }
 
@@ -80,6 +86,9 @@ impl Model {
             event::KeyCode::Char(c) => {
                 // TODO: should probably ignore control chars
                 self.buffer.insert(c);
+            }
+            event::KeyCode::Enter => {
+                self.buffer.insert('\n');
             }
             event::KeyCode::Backspace => {
                 self.buffer.delete();

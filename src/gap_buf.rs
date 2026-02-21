@@ -98,6 +98,26 @@ impl GapBuffer {
 
         Ok(())
     }
+
+    fn translate_index(&self, index: usize) -> usize {
+        if index < self.gap_start {
+            index
+        } else {
+            index + self.gap_end
+        }
+    }
+
+    pub fn get(&self, index: usize) -> Option<&char> {
+        let real_index = self.translate_index(index);
+        self.buffer.get(real_index)
+    }
+
+    pub fn iter(&'_ self) -> GapBufferIter<'_> {
+        GapBufferIter {
+            buff: self,
+            index: 0,
+        }
+    }
 }
 
 impl Default for GapBuffer {
@@ -117,6 +137,24 @@ impl std::fmt::Display for GapBuffer {
         }
 
         Ok(())
+    }
+}
+
+pub struct GapBufferIter<'a> {
+    buff: &'a GapBuffer,
+    index: usize,
+}
+
+impl<'a> Iterator for GapBufferIter<'a> {
+    type Item = &'a char;
+
+    #[inline]
+    fn next(&mut self) -> Option<&'a char> {
+        let next = self.buff.get(self.index);
+        if next.is_some() {
+            self.index += 1;
+        }
+        next
     }
 }
 
@@ -210,11 +248,13 @@ mod tests {
         let mut buf = GapBuffer::new();
         let hello = String::from("Hello, world");
         buf.insert(&hello);
-        buf.delete();
+        buf.delete().expect("Should work.");
 
         assert_eq!(buf.to_string(), "Hello, worl");
 
-        buf.delete();
+        buf.delete().expect("Should work.");
         assert_eq!(buf.to_string(), "Hello, wor");
     }
+
+    // TODO: need to add tests for iter(), get(), get_idx(), and GapBufferIter
 }

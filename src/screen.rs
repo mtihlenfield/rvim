@@ -16,10 +16,23 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         new_model: &model::Model,
     ) -> std::io::Result<()> {
-        // for c in new_model.buffer.buf.to_string() {}
-        for row in 0..screen_buf.rows - 1 {
-            screen_buf.write(row, 0, '~');
+        let mut row = 0;
+        let mut col = 0;
+        for c in new_model.buffer.iter() {
+            if *c == '\n' || col >= screen_buf.cols {
+                row += 1;
+                col = 0;
+                continue;
+            }
+
+            screen_buf.write(row, col, *c);
+            col += 1;
         }
+
+        for empty_row in row + 1..screen_buf.rows - 1 {
+            screen_buf.write(empty_row, 0, '~');
+        }
+
         Ok(())
     }
 }
@@ -132,6 +145,8 @@ impl Screen {
         self.buffer_view.update(&mut self.screen_buf, new_model)?;
         self.status_view.update(&mut self.screen_buf, new_model)?;
         self.screen_buf.flush(&mut out)?;
+        // TODO: figure out how to handle the cursor
+        out.queue(cursor::MoveTo(0, 0))?;
         out.flush()
     }
 }
