@@ -22,9 +22,12 @@ impl Position {
 
 type BufferIter<'a> = gap_buf::GapBufferIter<'a>;
 
+#[derive(Debug)]
+pub struct BufferError(String);
+
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
-    pub cursor_position: Position,
+    cursor_position: Position,
 }
 
 impl Buffer {
@@ -40,11 +43,14 @@ impl Buffer {
         self.cursor_position.col += 1;
     }
 
-    pub fn delete(&mut self) {
-        if let Ok(()) = self.buf.delete() {
-            // We should only get an Err back if we can't delete
-            // because we're at the start of the buffer
-            self.cursor_position.col -= 1;
+    pub fn delete(&mut self) -> Result<(), BufferError> {
+        match self.buf.delete() {
+            Ok(()) => {
+                self.cursor_position.col -= 1;
+                Ok(())
+            }
+            Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),
+            Err(e) => Err(BufferError(e.to_string())),
         }
     }
 
@@ -84,14 +90,17 @@ impl Model {
     pub fn handle_insert_update(&mut self, key_ev: event::KeyEvent) -> bool {
         match key_ev.code {
             event::KeyCode::Char(c) => {
-                // TODO: should probably ignore control chars
-                self.buffer.insert(c);
+                if !c.is_control() {
+                    self.buffer.insert(c);
+                }
             }
             event::KeyCode::Enter => {
                 self.buffer.insert('\n');
             }
             event::KeyCode::Backspace => {
-                self.buffer.delete();
+                if let Err(e) = self.buffer.delete() {
+                    panic!("Failed to delete: {}", e.0);
+                }
             }
             event::KeyCode::Esc => {
                 self.mode = Mode::Normal;

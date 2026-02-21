@@ -1,8 +1,41 @@
 const DEFAULT_GAP_SIZE: usize = 64;
 
-// TODO: make this enum with different error types, impl Error and Display
-#[derive(Debug)]
-pub struct MoveError(&'static str);
+#[derive(Debug, Eq, PartialEq)]
+pub enum GapBufferError {
+    /// An attempt was made to move the cursor past the end of the GapBuffer
+    MoveAfterEnd {
+        buffer_len: usize,
+        move_position: usize,
+    },
+
+    /// An attempt was made to delete backwards while cursor was at index 0
+    DeleteFromStart,
+}
+
+impl std::fmt::Display for GapBufferError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MoveAfterEnd {
+                buffer_len,
+                move_position,
+            } => {
+                write!(
+                    f,
+                    "Attempted to move the cursor past the end of the buffer. Buffer len: {}, Move Position: {}",
+                    buffer_len, move_position
+                )
+            }
+            Self::DeleteFromStart => {
+                write!(
+                    f,
+                    "Attempted to delete (backwards) while cursor was at index 0."
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for GapBufferError {}
 
 #[derive(Debug)]
 pub struct GapBuffer {
@@ -35,11 +68,12 @@ impl GapBuffer {
         self.gap_end - self.gap_start
     }
 
-    fn move_cursor(&mut self, pos: usize) -> Result<(), MoveError> {
+    fn move_cursor(&mut self, pos: usize) -> Result<(), GapBufferError> {
         if pos > self.len() {
-            return Err(MoveError(
-                "Cannot move the gap buffer cursor past the data end.",
-            ));
+            return Err(GapBufferError::MoveAfterEnd {
+                buffer_len: self.len(),
+                move_position: pos,
+            });
         }
 
         let distance = pos.abs_diff(self.gap_start);
@@ -90,7 +124,7 @@ impl GapBuffer {
     }
 
     /// Insert at a new location in the buffer
-    pub fn insert_at(&mut self, s: &str, pos: usize) -> Result<(), MoveError> {
+    pub fn insert_at(&mut self, s: &str, pos: usize) -> Result<(), GapBufferError> {
         self.move_cursor(pos)?;
         self.insert(s);
 
@@ -98,9 +132,9 @@ impl GapBuffer {
     }
 
     /// Delete at the current cursor position
-    pub fn delete(&mut self) -> Result<(), MoveError> {
+    pub fn delete(&mut self) -> Result<(), GapBufferError> {
         if self.gap_start == 0 {
-            return Err(MoveError("Cannot delete from beginning of buffer."));
+            return Err(GapBufferError::DeleteFromStart);
         }
 
         self.gap_start -= 1;
@@ -159,6 +193,7 @@ pub struct GapBufferIter<'a> {
 }
 
 impl<'a> Iterator for GapBufferIter<'a> {
+    // TODO: I need to read about this type of trait
     type Item = &'a char;
 
     #[inline]
@@ -234,6 +269,48 @@ mod tests {
     }
 
     #[test]
+    fn test_move_cursor_equal() {
+        let mut buf = GapBuffer::new();
+        buf.insert("Hello, world");
+        buf.move_cursor(5).expect("Should work");
+        let gap_start = buf.gap_start;
+        let gap_end = buf.gap_end;
+        buf.move_cursor(5).expect("Should work");
+
+        assert_eq!(buf.gap_start, gap_start);
+        assert_eq!(buf.gap_end, gap_end);
+    }
+
+    #[test]
+    fn test_move_cursor_invalid() {
+        let mut buf = GapBuffer::new();
+        match buf.move_cursor(1) {
+            Ok(()) => panic!("Should have gotten error"),
+            Err(GapBufferError::MoveAfterEnd {
+                buffer_len,
+                move_position,
+            }) => {
+                assert_eq!(buffer_len, 0);
+                assert_eq!(move_position, 1);
+            }
+            Err(e) => panic!("{}", e),
+        };
+
+        buf.insert("Hello, world");
+        match buf.move_cursor(20) {
+            Ok(()) => panic!("Should have gotten error"),
+            Err(GapBufferError::MoveAfterEnd {
+                buffer_len,
+                move_position,
+            }) => {
+                assert_eq!(buffer_len, 12);
+                assert_eq!(move_position, 20);
+            }
+            Err(e) => panic!("{}", e),
+        };
+    }
+
+    #[test]
     fn test_insert_with_grow() {
         let mut buf = GapBuffer::new();
         let start = "a".repeat(DEFAULT_GAP_SIZE);
@@ -267,6 +344,17 @@ mod tests {
 
         buf.delete().expect("Should work.");
         assert_eq!(buf.to_string(), "Hello, wor");
+    }
+
+    #[test]
+    fn test_delete_from_start() {
+        let mut buf = GapBuffer::new();
+        assert_eq!(buf.delete().unwrap_err(), GapBufferError::DeleteFromStart);
+
+        let hello = String::from("Hello, world");
+        buf.insert(&hello);
+        buf.move_cursor(0).expect("Should work.");
+        assert_eq!(buf.delete().unwrap_err(), GapBufferError::DeleteFromStart);
     }
 
     #[test]
@@ -381,6 +469,31 @@ mod tests {
         // invalid idx after the gap
         assert_eq!(buf.get(buf.gap_end), None);
         assert_eq!(buf.get(30), None);
+    }
+
+    #[test]
+    fn test_is_empty() {
+        let mut buf = GapBuffer::new();
+        assert_eq!(buf.is_empty(), true);
+
+        buf.insert("Hello, world");
+        assert_eq!(buf.is_empty(), false);
+    }
+
+    #[test]
+    fn test_len() {
+        let mut buf = GapBuffer::new();
+        assert_eq!(buf.len(), 0);
+
+        let hello = String::from("Hello, world");
+        buf.insert(&hello);
+        assert_eq!(buf.len(), hello.len());
+
+        buf.move_cursor(0).expect("Should work");
+        assert_eq!(buf.len(), hello.len());
+
+        buf.move_cursor(hello.len()).expect("Should work");
+        assert_eq!(buf.len(), hello.len());
     }
 
     // TODO: need to add tests for iter(), and GapBufferIter
