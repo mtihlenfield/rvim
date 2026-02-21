@@ -1,5 +1,4 @@
-use crossterm::terminal;
-use crossterm::{ExecutableCommand, QueueableCommand};
+use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
 use log::warn;
 use std::io::{Stdout, Write, stdout};
 
@@ -17,6 +16,10 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         new_model: &model::Model,
     ) -> std::io::Result<()> {
+        // for c in new_model.buffer.buf.to_string() {}
+        for row in 0..screen_buf.rows - 1 {
+            screen_buf.write(row, 0, '~');
+        }
         Ok(())
     }
 }
@@ -33,50 +36,64 @@ impl StatusView {
         screen_buf: &mut ScreenBuf,
         new_model: &model::Model,
     ) -> std::io::Result<()> {
-        // TODO: add the buffer contents
-        Ok(())
+        match new_model.mode {
+            model::Mode::Insert => {
+                for (i, c) in "-- Insert --".chars().enumerate() {
+                    screen_buf.write(screen_buf.rows - 1, i as u16, c);
+                }
+
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }
 
 struct ScreenBuf {
-    width: u16,
-    heigh: u16,
+    rows: u16,
+    cols: u16,
     back: Vec<Vec<char>>,
     front: Vec<Vec<char>>,
 }
 
 impl ScreenBuf {
-    pub fn new(width: u16, height: u16) -> ScreenBuf {
+    pub fn new(rows: u16, cols: u16) -> ScreenBuf {
         ScreenBuf {
-            width: width,
-            heigh: height,
-            back: vec![vec![' '; width as usize]; height as usize],
-            front: vec![vec![' '; width as usize]; height as usize],
+            rows: rows,
+            cols: cols,
+            back: vec![vec![' '; cols as usize]; rows as usize],
+            front: vec![vec![' '; cols as usize]; rows as usize],
         }
     }
 
     pub fn clear(&mut self) {
-        // TODO:
-        // for row in &mut self.back {
-        //     for c in &mut row {
-        //         *c = ' ';
-        //     }
-        // }
+        for row in &mut self.back {
+            for c in row {
+                *c = ' ';
+            }
+        }
     }
 
-    pub fn write(&mut self, col: u16, row: u16, val: char) {}
+    pub fn write(&mut self, row: u16, col: u16, val: char) {
+        self.back[row as usize][col as usize] = val;
+    }
 
-    pub fn flush(&self, out: &Stdout) -> std::io::Result<()> {
-        // TODO: look at some other editors and see how they handle this
-        // for row in 0..self.width {
-        //     // TODO: make sure this traversal is cache friendly
-        //     for row in 0..self.height {
-        //         for col in 0..self.width {
-        //             let front_col = self.front[row][col];
-        //             let back_col = self.back[row][col];
-        //         }
-        //     }
-        // }
+    pub fn flush(&mut self, out: &mut Stdout) -> std::io::Result<()> {
+        // TODO: make sure this traversal is cache friendly
+        for row in 0..self.rows {
+            for col in 0..self.cols {
+                let front_col = self.front[row as usize][col as usize];
+                let back_col = self.back[row as usize][col as usize];
+                if back_col != front_col {
+                    // info!("setting ({}, {}) to {}", row, col, back_col);
+                    out.queue(cursor::MoveTo(col, row))?;
+                    out.queue(style::Print(back_col))?;
+                    self.front[row as usize][col as usize] = back_col.clone();
+                } else {
+                    // info!("no change to ({}, {}) ({})", row, col, front_col);
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -89,9 +106,9 @@ pub struct Screen {
 }
 
 impl Screen {
-    pub fn new(width: u16, height: u16) -> Screen {
+    pub fn new(rows: u16, cols: u16) -> Screen {
         Screen {
-            screen_buf: ScreenBuf::new(width, height),
+            screen_buf: ScreenBuf::new(rows, cols),
             buffer_view: BufferView::new(),
             status_view: StatusView::new(),
             initialized: false,
@@ -105,8 +122,6 @@ impl Screen {
     pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
         let mut out = stdout();
         if !self.initialized {
-            // TODO enter alt screen so we don't mess up the term history
-
             out.execute(terminal::EnterAlternateScreen)?;
             out.execute(terminal::Clear(terminal::ClearType::All))?;
             terminal::enable_raw_mode()?;
@@ -116,7 +131,7 @@ impl Screen {
         self.screen_buf.clear();
         self.buffer_view.update(&mut self.screen_buf, new_model)?;
         self.status_view.update(&mut self.screen_buf, new_model)?;
-        self.screen_buf.flush(&out)?;
+        self.screen_buf.flush(&mut out)?;
         out.flush()
     }
 }

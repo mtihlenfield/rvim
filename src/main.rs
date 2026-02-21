@@ -10,8 +10,8 @@ mod screen;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     log4rs::init_file("config/log4rs.yaml", Default::default()).unwrap();
     info!("Starting rvim.");
-    let (width, height) = terminal::size()?;
-    let mut screen = screen::Screen::new(width, height);
+    let (cols, rows) = terminal::size()?;
+    let mut screen = screen::Screen::new(rows, cols);
     let mut model = model::Model::new();
     screen.update(&model)?;
 

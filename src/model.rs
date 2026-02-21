@@ -1,5 +1,6 @@
 use crate::gap_buf;
 use crossterm::event;
+use log::info;
 
 pub enum Mode {
     Normal,
@@ -65,6 +66,7 @@ impl Model {
                 'q' => true,
                 'i' => {
                     self.mode = Mode::Insert;
+                    info!("Switching to Insert mode.");
                     false
                 }
                 _ => false,
@@ -84,6 +86,7 @@ impl Model {
             }
             event::KeyCode::Esc => {
                 self.mode = Mode::Normal;
+                info!("Switching to Normal mode.");
             }
             _ => {}
         };
