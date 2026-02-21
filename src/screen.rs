@@ -135,9 +135,9 @@ impl Screen {
     pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
         let mut out = stdout();
         if !self.initialized {
+            terminal::enable_raw_mode()?;
             out.execute(terminal::EnterAlternateScreen)?;
             out.execute(terminal::Clear(terminal::ClearType::All))?;
-            terminal::enable_raw_mode()?;
             self.initialized = true;
         }
 
@@ -153,16 +153,16 @@ impl Screen {
 
 impl Drop for Screen {
     fn drop(&mut self) {
-        if let Err(_) = terminal::disable_raw_mode() {
-            warn!("Failed to disable raw mode on close.");
-        }
-
         if let Err(_) = stdout().execute(terminal::Clear(terminal::ClearType::All)) {
             warn!("Failed to clear screen on close.");
         }
 
         if let Err(_) = stdout().execute(terminal::LeaveAlternateScreen) {
             warn!("Failed to return to alt screen.");
+        }
+
+        if let Err(_) = terminal::disable_raw_mode() {
+            warn!("Failed to disable raw mode on close.");
         }
     }
 }

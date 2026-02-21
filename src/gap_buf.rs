@@ -1,5 +1,6 @@
 const DEFAULT_GAP_SIZE: usize = 64;
 
+// TODO: make this enum with different error types, impl Error and Display
 #[derive(Debug)]
 pub struct MoveError(&'static str);
 
@@ -24,6 +25,14 @@ impl GapBuffer {
 
     pub fn len(&self) -> usize {
         self.buffer.len() - (self.gap_end - self.gap_start)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn gap_size(&self) -> usize {
+        self.gap_end - self.gap_start
     }
 
     fn move_cursor(&mut self, pos: usize) -> Result<(), MoveError> {
@@ -68,10 +77,10 @@ impl GapBuffer {
 
     /// Insert at the current cursor position
     pub fn insert(&mut self, s: &str) {
-        let current_gap_size = self.gap_end - self.gap_start;
+        let current_gap_size = self.gap_size();
         let str_len = s.chars().count();
         if current_gap_size < str_len {
-            self.grow_gap(str_len);
+            self.grow_gap(str_len - current_gap_size);
         }
 
         for c in s.chars() {
@@ -99,11 +108,15 @@ impl GapBuffer {
         Ok(())
     }
 
+    /// Translates an index in to the GapBuffer in to index into
+    /// the "real" inner buffer. Does not do bounds checking on the input
+    /// index, so it may return a "real" index that is outside the bounds
+    /// of the GapBuffer if the passed in index is not valid.
     fn translate_index(&self, index: usize) -> usize {
         if index < self.gap_start {
             index
         } else {
-            index + self.gap_end
+            index + self.gap_size()
         }
     }
 
@@ -256,5 +269,119 @@ mod tests {
         assert_eq!(buf.to_string(), "Hello, wor");
     }
 
-    // TODO: need to add tests for iter(), get(), get_idx(), and GapBufferIter
+    #[test]
+    fn test_get_idx_with_empty_buffer() {
+        let buf = GapBuffer::new();
+
+        // If you try to index at gap_start, the valid char is really the one at gap_end
+        assert_eq!(buf.translate_index(0), buf.gap_end);
+        assert_eq!(buf.translate_index(buf.gap_start), buf.gap_end);
+
+        // If you try to index after the gap, it should return your index + the gap size
+        assert_eq!(
+            buf.translate_index(buf.gap_end),
+            buf.gap_size() + buf.gap_end
+        );
+        assert_eq!(
+            buf.translate_index(buf.gap_end + 5),
+            buf.gap_size() + buf.gap_end + 5
+        );
+    }
+
+    #[test]
+    fn test_get_idx_with_gap_at_end() {
+        let mut buf = GapBuffer::new();
+        buf.insert("Hello, world.");
+
+        // A valid indices before the gap
+        assert_eq!(buf.translate_index(0), 0);
+        assert_eq!(buf.translate_index(3), 3);
+        assert_eq!(buf.translate_index(buf.gap_start), buf.gap_end);
+
+        // If you try to index after the gap, it should return your index + the gap size
+        assert_eq!(
+            buf.translate_index(buf.gap_end),
+            buf.gap_size() + buf.gap_end
+        );
+        assert_eq!(
+            buf.translate_index(buf.gap_end + 5),
+            buf.gap_size() + buf.gap_end + 5
+        );
+    }
+
+    #[test]
+    fn test_get_idx_with_gap_in_middle() {
+        let mut buf = GapBuffer::new();
+        buf.insert("Hello, world.");
+        buf.move_cursor(6).expect("Should work");
+
+        // A valid indices before the gap
+        assert_eq!(buf.translate_index(0), 0);
+        assert_eq!(buf.translate_index(3), 3);
+        assert_eq!(buf.translate_index(buf.gap_start), buf.gap_end);
+
+        // A valid index after the gap
+        assert_eq!(buf.translate_index(8), buf.gap_size() + 8);
+        assert_eq!(
+            buf.translate_index(buf.gap_end),
+            buf.gap_size() + buf.gap_end
+        );
+
+        // invalid index
+        assert_eq!(
+            buf.translate_index(buf.gap_end + 20),
+            buf.gap_size() + buf.gap_end + 20
+        );
+    }
+
+    #[test]
+    fn test_get_idx_with_gap_at_start() {
+        let mut buf = GapBuffer::new();
+        buf.insert("Hello, world.");
+        buf.move_cursor(0).expect("Should work");
+
+        assert_eq!(buf.translate_index(0), buf.gap_end);
+        assert_eq!(buf.translate_index(buf.gap_start), buf.gap_end);
+        assert_eq!(buf.translate_index(3), buf.gap_size() + 3);
+
+        // A valid index after the gap
+        assert_eq!(buf.translate_index(8), buf.gap_size() + 8);
+        assert_eq!(
+            buf.translate_index(buf.gap_end),
+            buf.gap_size() + buf.gap_end
+        );
+
+        // invalid index
+        assert_eq!(
+            buf.translate_index(buf.gap_end + 20),
+            buf.gap_size() + buf.gap_end + 20
+        );
+    }
+
+    #[test]
+    fn test_get() {
+        let mut buf = GapBuffer::new();
+        let hello = String::from("Hello, world");
+        buf.insert(&hello);
+
+        assert_eq!(buf.get(5), Some(&','));
+        assert_eq!(buf.get(buf.gap_start), None);
+        assert_eq!(buf.get(buf.gap_end), None);
+
+        buf.move_cursor(5).expect("Should work");
+        // Valid idx before the gap
+        assert_eq!(buf.get(1), Some(&'e'));
+
+        // valid idx (gap start)
+        assert_eq!(buf.get(buf.gap_start), Some(&','));
+
+        // valid idx after the gap
+        assert_eq!(buf.get(7), Some(&'w'));
+
+        // invalid idx after the gap
+        assert_eq!(buf.get(buf.gap_end), None);
+        assert_eq!(buf.get(30), None);
+    }
+
+    // TODO: need to add tests for iter(), and GapBufferIter
 }
