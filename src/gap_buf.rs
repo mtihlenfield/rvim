@@ -211,6 +211,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_default() {
+        let buf = GapBuffer::default();
+        assert_eq!(buf.len(), 0);
+        assert_eq!(buf.gap_start, 0);
+        assert_eq!(buf.gap_end, DEFAULT_GAP_SIZE);
+    }
+
+    #[test]
     fn test_insert_string_in_empty() {
         let mut buf = GapBuffer::new();
         let hello = String::from("Hello, world");
@@ -496,5 +504,26 @@ mod tests {
         assert_eq!(buf.len(), hello.len());
     }
 
-    // TODO: need to add tests for iter(), and GapBufferIter
+    #[test]
+    fn test_iter() {
+        let mut buf = GapBuffer::new();
+        assert_eq!(buf.iter().collect::<Vec<_>>().len(), 0);
+
+        let hello = "Hello, world";
+
+        // test with gap at end
+        buf.insert(hello);
+        let new_str: String = buf.iter().collect();
+        assert_eq!(new_str, hello);
+
+        // test with gap in middle
+        buf.move_cursor(5).expect("Should work");
+        let new_str: String = buf.iter().collect();
+        assert_eq!(new_str, hello);
+
+        // test with gap at start
+        buf.move_cursor(0).expect("Should work");
+        let new_str: String = buf.iter().collect();
+        assert_eq!(new_str, hello);
+    }
 }
