@@ -193,7 +193,6 @@ pub struct GapBufferIter<'a> {
 }
 
 impl<'a> Iterator for GapBufferIter<'a> {
-    // TODO: I need to read about this type of trait
     type Item = &'a char;
 
     #[inline]

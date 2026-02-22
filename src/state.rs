@@ -5,18 +5,31 @@ use log::info;
 pub enum Mode {
     Normal,
     Insert,
-    // CommandLine,
+    CommandLine,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Position {
-    pub col: u16,
     pub row: u16,
+    pub col: u16,
 }
 
 impl Position {
     pub fn new() -> Position {
-        Position { col: 0, row: 0 }
+        Position { row: 0, col: 0 }
+    }
+
+    pub fn newline(&mut self) {
+        self.row += 1;
+        self.col = 0;
+    }
+
+    pub fn right(&mut self) {
+        self.col += 1;
+    }
+
+    pub fn left(&mut self) {
+        self.col -= 1;
     }
 }
 
@@ -27,26 +40,41 @@ pub struct BufferError(String);
 
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
-    cursor_position: Position,
+    pub cursor: Position,
+    view_rows: u16,
+    view_cols: u16,
 }
 
 impl Buffer {
-    pub fn new() -> Buffer {
+    pub fn new(view_rows: u16, view_cols: u16) -> Buffer {
         Buffer {
             buf: gap_buf::GapBuffer::new(),
-            cursor_position: Position::new(),
+            cursor: Position::new(),
+            view_rows: view_rows,
+            view_cols: view_cols,
         }
     }
 
     pub fn insert(&mut self, c: char) {
+        // TODO: having to convert to string may not be a very good api
         self.buf.insert(&c.to_string());
-        self.cursor_position.col += 1;
+
+        if c == '\n' || self.cursor.col >= self.view_cols {
+            self.cursor.newline();
+        } else {
+            self.cursor.right();
+        }
+
+        info!("Cursor afte insert: {:?}", self.cursor);
     }
 
     pub fn delete(&mut self) -> Result<(), BufferError> {
         match self.buf.delete() {
             Ok(()) => {
-                self.cursor_position.col -= 1;
+                // TODO: this does not currently handle moving the cursor when you are deleting the
+                // last remaining char in a row. To do that, I may need to know where on the screen
+                // the previous newline was.
+                self.cursor.left();
                 Ok(())
             }
             Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),
@@ -59,16 +87,16 @@ impl Buffer {
     }
 }
 
-pub struct Model {
+pub struct EditorState {
     pub buffer: Buffer,
     pub mode: Mode,
 }
 
-impl Model {
-    pub fn new() -> Model {
-        Model {
+impl EditorState {
+    pub fn new(view_rows: u16, view_cols: u16) -> EditorState {
+        EditorState {
             mode: Mode::Normal,
-            buffer: Buffer::new(),
+            buffer: Buffer::new(view_rows, view_cols),
         }
     }
 
@@ -116,6 +144,7 @@ impl Model {
         match self.mode {
             Mode::Normal => self.handle_normal_update(key_ev),
             Mode::Insert => self.handle_insert_update(key_ev),
+            Mode::CommandLine => false,
         }
     }
 }

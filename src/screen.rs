@@ -2,7 +2,7 @@ use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
 use log::warn;
 use std::io::{Stdout, Write, stdout};
 
-use crate::model;
+use crate::state;
 
 struct BufferView {}
 
@@ -14,11 +14,11 @@ impl BufferView {
     pub fn update(
         &mut self,
         screen_buf: &mut ScreenBuf,
-        new_model: &model::Model,
+        new_state: &state::EditorState,
     ) -> std::io::Result<()> {
         let mut row = 0;
         let mut col = 0;
-        for c in new_model.buffer.iter() {
+        for c in new_state.buffer.iter() {
             if *c == '\n' || col >= screen_buf.cols {
                 row += 1;
                 col = 0;
@@ -47,10 +47,10 @@ impl StatusView {
     pub fn update(
         &mut self,
         screen_buf: &mut ScreenBuf,
-        new_model: &model::Model,
+        new_state: &state::EditorState,
     ) -> std::io::Result<()> {
-        match new_model.mode {
-            model::Mode::Insert => {
+        match new_state.mode {
+            state::Mode::Insert => {
                 for (i, c) in "-- Insert --".chars().enumerate() {
                     screen_buf.write(screen_buf.rows - 1, i as u16, c);
                 }
@@ -98,12 +98,9 @@ impl ScreenBuf {
                 let front_col = self.front[row as usize][col as usize];
                 let back_col = self.back[row as usize][col as usize];
                 if back_col != front_col {
-                    // info!("setting ({}, {}) to {}", row, col, back_col);
                     out.queue(cursor::MoveTo(col, row))?;
                     out.queue(style::Print(back_col))?;
                     self.front[row as usize][col as usize] = back_col.clone();
-                } else {
-                    // info!("no change to ({}, {}) ({})", row, col, front_col);
                 }
             }
         }
@@ -132,7 +129,7 @@ impl Screen {
         self.screen_buf = ScreenBuf::new(width, height);
     }
 
-    pub fn update(&mut self, new_model: &model::Model) -> std::io::Result<()> {
+    pub fn update(&mut self, new_state: &state::EditorState) -> std::io::Result<()> {
         let mut out = stdout();
         if !self.initialized {
             terminal::enable_raw_mode()?;
@@ -142,11 +139,16 @@ impl Screen {
         }
 
         self.screen_buf.clear();
-        self.buffer_view.update(&mut self.screen_buf, new_model)?;
-        self.status_view.update(&mut self.screen_buf, new_model)?;
+        self.buffer_view.update(&mut self.screen_buf, new_state)?;
+        self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
-        // TODO: figure out how to handle the cursor
-        out.queue(cursor::MoveTo(0, 0))?;
+        match new_state.mode {
+            state::Mode::Insert | state::Mode::Normal => {
+                let cursor = new_state.buffer.cursor.clone();
+                out.queue(cursor::MoveTo(cursor.col, cursor.row))?;
+            }
+            _ => {}
+        };
         out.flush()
     }
 }
