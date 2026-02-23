@@ -145,7 +145,7 @@ impl Screen {
         match new_state.mode {
             state::Mode::Insert | state::Mode::Normal => {
                 let cursor = new_state.buffer.cursor.clone();
-                out.queue(cursor::MoveTo(cursor.col, cursor.row))?;
+                out.queue(cursor::MoveTo(cursor.window_col(), cursor.window_row()))?;
             }
             _ => {}
         };

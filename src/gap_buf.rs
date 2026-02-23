@@ -159,11 +159,39 @@ impl GapBuffer {
         self.buffer.get(real_index)
     }
 
-    pub fn iter(&'_ self) -> GapBufferIter<'_> {
+    pub fn chars(&'_ self) -> GapBufferIter<'_> {
         GapBufferIter {
             buff: self,
-            index: 0,
+            left_index: 0,
+            right_index: self.len(),
         }
+    }
+
+    pub fn chars_at(&'_ self, index: usize) -> GapBufferIter<'_> {
+        if index >= self.len() {
+            panic!("Attempt to index past end of gap buffer.");
+        }
+
+        GapBufferIter {
+            buff: self,
+            left_index: index,
+            right_index: self.len(),
+        }
+    }
+
+    /// Moving backwards from 'start', find the first instance of 'search'
+    /// and return it's index.
+    pub fn find_prev(self, start: usize, search: char) -> Option<usize> {
+        for (idx, c) in self.chars_at(start).rev().enumerate() {
+            if *c != search {
+                continue;
+            }
+
+            // TODO: think about whether or not there is an off by one error here.
+            return Some(start - idx);
+        }
+
+        None
     }
 }
 
@@ -189,7 +217,8 @@ impl std::fmt::Display for GapBuffer {
 
 pub struct GapBufferIter<'a> {
     buff: &'a GapBuffer,
-    index: usize,
+    left_index: usize,
+    right_index: usize,
 }
 
 impl<'a> Iterator for GapBufferIter<'a> {
@@ -197,11 +226,26 @@ impl<'a> Iterator for GapBufferIter<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<&'a char> {
-        let next = self.buff.get(self.index);
-        if next.is_some() {
-            self.index += 1;
+        if self.left_index < self.right_index {
+            let val = self.buff.get(self.left_index);
+            self.left_index += 1;
+            val
+        } else {
+            None
         }
-        next
+    }
+}
+
+impl<'a> DoubleEndedIterator for GapBufferIter<'a> {
+    #[inline]
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.left_index < self.right_index {
+            self.right_index -= 1;
+            let val = self.buff.get(self.right_index);
+            val
+        } else {
+            None
+        }
     }
 }
 
@@ -504,25 +548,81 @@ mod tests {
     }
 
     #[test]
-    fn test_iter() {
+    fn test_chars() {
         let mut buf = GapBuffer::new();
-        assert_eq!(buf.iter().collect::<Vec<_>>().len(), 0);
+        assert_eq!(buf.chars().collect::<Vec<_>>().len(), 0);
 
         let hello = "Hello, world";
 
         // test with gap at end
         buf.insert(hello);
-        let new_str: String = buf.iter().collect();
+        let new_str: String = buf.chars().collect();
         assert_eq!(new_str, hello);
 
         // test with gap in middle
         buf.move_cursor(5).expect("Should work");
-        let new_str: String = buf.iter().collect();
+        let new_str: String = buf.chars().collect();
         assert_eq!(new_str, hello);
 
         // test with gap at start
         buf.move_cursor(0).expect("Should work");
-        let new_str: String = buf.iter().collect();
+        let new_str: String = buf.chars().collect();
         assert_eq!(new_str, hello);
     }
+
+    #[test]
+    fn test_chars_at() {
+        let mut buf = GapBuffer::new();
+        let hello = "Hello, world";
+        buf.insert(hello);
+
+        let new_str: String = buf.chars_at(7).collect();
+        assert_eq!(new_str, "world");
+
+        // test with gap in middle
+        buf.move_cursor(5).expect("Should work");
+        println!("{:?}", buf);
+        let new_str: String = buf.chars_at(7).collect();
+        assert_eq!(new_str, "world");
+
+        // test with gap at start
+        buf.move_cursor(0).expect("Should work");
+        let new_str: String = buf.chars_at(7).collect();
+        assert_eq!(new_str, "world");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_chars_at_panic() {
+        let mut buf = GapBuffer::new();
+        buf.insert("Hello, world");
+        buf.chars_at(30);
+    }
+
+    #[test]
+    fn test_rev_chars() {
+        let mut buf = GapBuffer::new();
+        assert_eq!(buf.chars().rev().collect::<Vec<_>>().len(), 0);
+
+        let hello = "Hello, world";
+        let olleh = "dlrow ,olleH";
+
+        // test with gap at end
+        buf.insert(hello);
+        println!("{:?}", buf.get(11));
+        let new_str: String = buf.chars().rev().collect();
+        assert_eq!(new_str, olleh);
+
+        // test with gap in middle
+        buf.move_cursor(5).expect("Should work");
+        let new_str: String = buf.chars().rev().collect();
+        assert_eq!(new_str, olleh);
+
+        // test with gap at start
+        buf.move_cursor(0).expect("Should work");
+        let new_str: String = buf.chars().rev().collect();
+        assert_eq!(new_str, olleh);
+    }
+
+    // TODO: test for find_prev
 }

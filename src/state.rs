@@ -10,8 +10,8 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub struct Position {
-    pub row: u16,
-    pub col: u16,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl Position {
@@ -33,6 +33,60 @@ impl Position {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Cursor {
+    window_pos: Position,
+    global_pos: Position,
+    global_offset: usize,
+}
+
+impl Cursor {
+    pub fn new() -> Cursor {
+        Cursor {
+            // The position relative to the start of the buffer view
+            window_pos: Position::new(),
+            // The position relative to the start of the buffer contents
+            global_pos: Position::new(),
+            // The global position as an index in to the buffer contents
+            // TODO: Do I need this? Can I do global_pos.rows * global_pos.cols? The question is
+            // how newlines are handled.
+            global_offset: 0,
+        }
+    }
+
+    pub fn newline(&mut self) {
+        self.window_pos.newline();
+        self.global_pos.newline();
+        self.global_offset += 1;
+    }
+
+    pub fn right(&mut self) {
+        self.window_pos.right();
+        self.global_pos.right();
+        self.global_offset += 1;
+    }
+
+    pub fn left(&mut self) {
+        self.window_pos.left();
+        self.global_pos.left();
+        self.global_offset -= 1;
+    }
+
+    /// Return the current global column. Note that this should be the same
+    /// as the window column. This just returns a usize instead of u16.
+    pub fn col(&self) -> usize {
+        self.global_pos.col
+    }
+
+    pub fn window_col(&self) -> u16 {
+        self.window_pos.col as u16
+    }
+
+    pub fn window_row(&self) -> u16 {
+        self.window_pos.row as u16
+    }
+}
+
 type BufferIter<'a> = gap_buf::GapBufferIter<'a>;
 
 #[derive(Debug)]
@@ -40,7 +94,7 @@ pub struct BufferError(String);
 
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
-    pub cursor: Position,
+    pub cursor: Cursor,
     view_rows: u16,
     view_cols: u16,
 }
@@ -49,7 +103,7 @@ impl Buffer {
     pub fn new(view_rows: u16, view_cols: u16) -> Buffer {
         Buffer {
             buf: gap_buf::GapBuffer::new(),
-            cursor: Position::new(),
+            cursor: Cursor::new(),
             view_rows: view_rows,
             view_cols: view_cols,
         }
@@ -59,22 +113,26 @@ impl Buffer {
         // TODO: having to convert to string may not be a very good api
         self.buf.insert(&c.to_string());
 
-        if c == '\n' || self.cursor.col >= self.view_cols {
+        if c == '\n' || self.cursor.col() >= self.view_cols.into() {
             self.cursor.newline();
         } else {
             self.cursor.right();
         }
-
-        info!("Cursor afte insert: {:?}", self.cursor);
     }
 
     pub fn delete(&mut self) -> Result<(), BufferError> {
         match self.buf.delete() {
             Ok(()) => {
-                // TODO: this does not currently handle moving the cursor when you are deleting the
-                // last remaining char in a row. To do that, I may need to know where on the screen
-                // the previous newline was.
-                self.cursor.left();
+                // Note that we *know* at this point that we aren't at the very start of the
+                // buffer. If we were we would have gotten a DeleteFromStart error.
+                if self.cursor.col() == 0 {
+                    // TODO: Need to:
+                    //     - find the start of the previous line
+                    //     - get the length of that line (find the next newline)
+                    //     - place the cursor after the last (non-newline) char in the line
+                } else {
+                    self.cursor.left();
+                }
                 Ok(())
             }
             Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),
@@ -83,7 +141,7 @@ impl Buffer {
     }
 
     pub fn iter(&'_ self) -> BufferIter<'_> {
-        self.buf.iter()
+        self.buf.chars()
     }
 }
 
@@ -131,6 +189,10 @@ impl EditorState {
                 }
             }
             event::KeyCode::Esc => {
+                // TODO: in vim this also results in a cursor change - it moves one char to the
+                // left if it's at the end of a line (of text, not a row). Which means that if
+                // you go straight back to insert mode you start one char to the left of where you
+                // were before switching to normal mode.
                 self.mode = Mode::Normal;
                 info!("Switching to Normal mode.");
             }
