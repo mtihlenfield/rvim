@@ -55,4 +55,15 @@ Small, mostly featureless, vim implementation in Rust. Just built for learning R
 
 - Main loop listens for events, updates the model, and then passes that to the view
 
+### 
+Delete scenarios:
 
+- Current pos: 
+    - start of line
+        - Need to delete the \n and move up to end of the next line
+            - How do I determine what the new global offset is?
+                - It's just current - 1
+    - middle of line
+        - just delete the char and move left 1
+    - end of line
+        - just delete the char and move left 1

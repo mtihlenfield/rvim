@@ -10,21 +10,7 @@ mod state;
 
 fn main() {
     log4rs::init_file("config/log4rs.yaml", Default::default()).unwrap();
-
-    panic::set_hook(Box::new(|panic_info| {
-        // TODO: consider using a crate for this? It doesn't work very well.
-        let (filename, line) = panic_info
-            .location()
-            .map(|loc| (loc.file(), loc.line()))
-            .unwrap_or(("<unknown>", 0));
-
-        let cause = panic_info
-            .payload()
-            .downcast_ref::<&str>()
-            .unwrap_or(&"<cause unknown>");
-
-        error!("A panic occurred at {}:{}: {}", filename, line, cause);
-    }));
+    log_panics::init();
 
     info!("Starting rvim.");
     let (cols, rows) = terminal::size().expect("Failed to get term size.");

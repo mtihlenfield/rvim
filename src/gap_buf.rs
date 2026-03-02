@@ -199,7 +199,6 @@ impl GapBuffer {
     /// end of the buffer.
     pub fn find_prev(&self, start: usize, search_char: char) -> Option<usize> {
         for (idx, c) in self.chars_at_rev(start).enumerate() {
-            println!("c: {}", c);
             if *c != search_char {
                 continue;
             }
@@ -599,7 +598,6 @@ mod tests {
 
         // test with gap in middle
         buf.move_cursor(5).expect("Should work");
-        println!("{:?}", buf);
         let new_str: String = buf.chars_at(7).collect();
         assert_eq!(new_str, "world");
         let new_str: String = buf.chars_at(0).collect();

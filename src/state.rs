@@ -31,6 +31,11 @@ impl Position {
     pub fn left(&mut self) {
         self.col -= 1;
     }
+
+    pub fn up(&mut self, col: usize) {
+        self.col = col;
+        self.row -= 1;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +74,12 @@ impl Cursor {
     pub fn left(&mut self) {
         self.window_pos.left();
         self.global_pos.left();
+        self.global_offset -= 1;
+    }
+
+    pub fn up(&mut self, col: usize) {
+        self.window_pos.up(col);
+        self.global_pos.up(col);
         self.global_offset -= 1;
     }
 
@@ -126,10 +137,22 @@ impl Buffer {
                 // Note that we *know* at this point that we aren't at the very start of the
                 // buffer. If we were we would have gotten a DeleteFromStart error.
                 if self.cursor.col() == 0 {
-                    // TODO: Need to:
-                    //     - find the start of the previous line
-                    //     - get the length of that line (find the next newline)
-                    //     - place the cursor after the last (non-newline) char in the line
+                    // Subtracting 1 from the global cursor offset because we deleted
+                    // a char but haven't updated the cursor yet, so it is out of date.
+                    let cur_offset = self.cursor.global_offset - 1;
+
+                    // Subtracting 1 here because the cursor is always one past the char
+                    // that is being deleted
+                    if cur_offset != 0
+                        && let Some(prev_line_end) = self.buf.find_prev(cur_offset - 1, '\n')
+                    {
+                        let len = cur_offset - prev_line_end - 1;
+                        self.cursor.up(len);
+                    } else {
+                        // We're on the first line, so we just set the cursor to the length
+                        // of the buffer
+                        self.cursor.up(cur_offset);
+                    }
                 } else {
                     self.cursor.left();
                 }
