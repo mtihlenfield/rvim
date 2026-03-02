@@ -1,3 +1,5 @@
+use std::iter::Rev;
+
 const DEFAULT_GAP_SIZE: usize = 64;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -179,19 +181,30 @@ impl GapBuffer {
         }
     }
 
+    pub fn chars_at_rev(&'_ self, index: usize) -> Rev<GapBufferIter<'_>> {
+        if index >= self.len() {
+            panic!("Attempt to index past end of gap buffer.");
+        }
+        GapBufferIter {
+            buff: self,
+            left_index: 0,
+            right_index: index + 1, // +1 because exclusive end
+        }
+        .rev()
+    }
+
     /// Moving backwards from 'start', find the first instance of 'search_char'
     /// and return it's index. The search range is inclusive: if the search_char is
     /// found at 'start', start will be returned. Panics if 'start' is past the
     /// end of the buffer.
     pub fn find_prev(&self, start: usize, search_char: char) -> Option<usize> {
-        for c in self.chars_at(start).rev() {
+        for (idx, c) in self.chars_at_rev(start).enumerate() {
             println!("c: {}", c);
             if *c != search_char {
                 continue;
             }
 
-            // TODO: this isn't right
-            // return Some(start - idx);
+            return Some(start - idx);
         }
 
         None
@@ -609,33 +622,28 @@ mod tests {
     }
 
     #[test]
-    fn test_rev_chars() {
+    fn test_chars_at_rev() {
         let mut buf = GapBuffer::new();
-        assert_eq!(buf.chars().rev().collect::<Vec<_>>().len(), 0);
-
         let hello = "Hello, world";
         let olleh = "dlrow ,olleH";
 
         // test with gap at end
         buf.insert(hello);
-        let new_str: String = buf.chars().rev().collect();
+        let new_str: String = buf.chars_at_rev(hello.len() - 1).collect();
         assert_eq!(new_str, olleh);
+
+        let new_str: String = buf.chars_at_rev(0).collect();
+        assert_eq!(new_str, "H");
 
         // test with gap in middle
         buf.move_cursor(5).expect("Should work");
-        let new_str: String = buf.chars().rev().collect();
-        assert_eq!(new_str, olleh);
+        let new_str: String = buf.chars_at_rev(5).collect();
+        assert_eq!(new_str, ",olleH");
 
         // test with gap at start
         buf.move_cursor(0).expect("Should work");
-        let new_str: String = buf.chars().rev().collect();
-        assert_eq!(new_str, olleh);
-
-        let new_str: String = buf.chars_at(5).rev().collect();
+        let new_str: String = buf.chars_at_rev(5).collect();
         assert_eq!(new_str, ",olleH");
-
-        let new_str: String = buf.chars_at(0).rev().collect();
-        assert_eq!(new_str, "");
     }
 
     #[test]
@@ -658,11 +666,17 @@ mod tests {
         let mut buf = GapBuffer::new();
         buf.insert("hello");
         assert_eq!(buf.find_prev(0, 'h'), Some(0));
-        // assert_eq!(buf.find_prev(4, 'o'), Some(4));
-        // assert_eq!(buf.find_prev(4, 'e'), Some(1));
-        // assert_eq!(buf.find_prev(3, 'e'), Some(1));
-        // assert_eq!(buf.find_prev(1, 'e'), Some(1));
+        assert_eq!(buf.find_prev(4, 'o'), Some(4));
+        assert_eq!(buf.find_prev(4, 'e'), Some(1));
+        assert_eq!(buf.find_prev(3, 'e'), Some(1));
+        assert_eq!(buf.find_prev(1, 'e'), Some(1));
     }
 
-    // TODO: test_find_prev_without_match
+    #[test]
+    fn test_find_prev_without_match() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_prev(0, 'x'), None);
+        assert_eq!(buf.find_prev(4, 'x'), None);
+    }
 }
