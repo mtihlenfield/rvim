@@ -40,7 +40,7 @@ impl Position {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    window_pos: Position,
+    viewport_pos: Position,
     global_pos: Position,
     global_offset: usize,
 }
@@ -49,7 +49,7 @@ impl Cursor {
     pub fn new() -> Cursor {
         Cursor {
             // The position relative to the start of the buffer view
-            window_pos: Position::new(),
+            viewport_pos: Position::new(),
             // The position relative to the start of the buffer contents
             global_pos: Position::new(),
             // The global position as an index in to the buffer contents
@@ -60,25 +60,25 @@ impl Cursor {
     }
 
     pub fn newline(&mut self) {
-        self.window_pos.newline();
+        self.viewport_pos.newline();
         self.global_pos.newline();
         self.global_offset += 1;
     }
 
     pub fn right(&mut self) {
-        self.window_pos.right();
+        self.viewport_pos.right();
         self.global_pos.right();
         self.global_offset += 1;
     }
 
     pub fn left(&mut self) {
-        self.window_pos.left();
+        self.viewport_pos.left();
         self.global_pos.left();
         self.global_offset -= 1;
     }
 
     pub fn up(&mut self, col: usize) {
-        self.window_pos.up(col);
+        self.viewport_pos.up(col);
         self.global_pos.up(col);
         self.global_offset -= 1;
     }
@@ -89,12 +89,12 @@ impl Cursor {
         self.global_pos.col
     }
 
-    pub fn window_col(&self) -> u16 {
-        self.window_pos.col as u16
+    pub fn viewport_col(&self) -> u16 {
+        self.viewport_pos.col as u16
     }
 
-    pub fn window_row(&self) -> u16 {
-        self.window_pos.row as u16
+    pub fn viewport_row(&self) -> u16 {
+        self.viewport_pos.row as u16
     }
 }
 
