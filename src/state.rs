@@ -1,4 +1,5 @@
 use crate::gap_buf;
+use crate::position::Position;
 use crossterm::event;
 use log::info;
 
@@ -9,96 +10,51 @@ pub enum Mode {
 }
 
 #[derive(Debug, Clone)]
-pub struct Position {
-    pub row: usize,
-    pub col: usize,
-}
-
-impl Position {
-    pub fn new() -> Position {
-        Position { row: 0, col: 0 }
-    }
-
-    pub fn newline(&mut self) {
-        self.row += 1;
-        self.col = 0;
-    }
-
-    pub fn right(&mut self) {
-        self.col += 1;
-    }
-
-    pub fn left(&mut self) {
-        self.col -= 1;
-    }
-
-    pub fn up(&mut self, col: usize) {
-        self.col = col;
-        self.row -= 1;
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Cursor {
-    viewport_pos: Position,
-    global_pos: Position,
-    global_offset: usize,
+    pos: Position,
+    offset: usize,
 }
 
 impl Cursor {
     pub fn new() -> Cursor {
         Cursor {
-            // The position relative to the start of the buffer view
-            viewport_pos: Position::new(),
             // The position relative to the start of the buffer contents
-            global_pos: Position::new(),
+            pos: Position::new(),
             // The global position as an index in to the buffer contents
-            // TODO: Do I need this? Can I do global_pos.rows * global_pos.cols? The question is
+            // TODO: Do I need this? Can I do pos.rows * pos.cols? The question is
             // how newlines are handled.
-            global_offset: 0,
+            offset: 0,
         }
     }
 
     pub fn newline(&mut self) {
-        self.viewport_pos.newline();
-        self.global_pos.newline();
-        self.global_offset += 1;
+        self.pos.newline();
+        self.offset += 1;
     }
 
     pub fn right(&mut self) {
-        self.viewport_pos.right();
-        self.global_pos.right();
-        self.global_offset += 1;
+        self.pos.right();
+        self.offset += 1;
     }
 
     pub fn left(&mut self) {
-        self.viewport_pos.left();
-        self.global_pos.left();
-        self.global_offset -= 1;
+        self.pos.left();
+        self.offset -= 1;
     }
 
     pub fn up(&mut self, col: usize) {
-        self.viewport_pos.up(col);
-        self.global_pos.up(col);
-        self.global_offset -= 1;
+        self.pos.up(col);
+        self.offset -= 1;
     }
 
     /// Return the current global column. Note that this should be the same
     /// as the window column. This just returns a usize instead of u16.
     pub fn col(&self) -> usize {
-        self.global_pos.col
-    }
-
-    pub fn viewport_col(&self) -> u16 {
-        self.viewport_pos.col as u16
-    }
-
-    pub fn viewport_row(&self) -> u16 {
-        self.viewport_pos.row as u16
+        self.pos.col
     }
 }
 
-type BufferIter<'a> = gap_buf::GapBufferIter<'a>;
+type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
 
 #[derive(Debug)]
 pub struct BufferError(String);
@@ -115,6 +71,8 @@ impl Buffer {
         Buffer {
             buf: gap_buf::GapBuffer::new(),
             cursor: Cursor::new(),
+            // TODO: I'd like to get rid of view rows/cols and just have the cursor be global. Let
+            // the screen code handle wrapping and what not
             view_rows: view_rows,
             view_cols: view_cols,
         }
@@ -139,7 +97,7 @@ impl Buffer {
                 if self.cursor.col() == 0 {
                     // Subtracting 1 from the global cursor offset because we deleted
                     // a char but haven't updated the cursor yet, so it is out of date.
-                    let cur_offset = self.cursor.global_offset - 1;
+                    let cur_offset = self.cursor.offset - 1;
 
                     // Subtracting 1 here because the cursor is always one past the char
                     // that is being deleted
@@ -163,8 +121,8 @@ impl Buffer {
         }
     }
 
-    pub fn iter(&'_ self) -> BufferIter<'_> {
-        self.buf.chars()
+    pub fn lines_at(&'_ self, line_num: usize) -> BufferLines<'_> {
+        self.buf.lines_at(line_num)
     }
 }
 

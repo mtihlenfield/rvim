@@ -1,4 +1,5 @@
 use std::iter::Rev;
+use std::ops::{Bound, RangeBounds};
 
 const DEFAULT_GAP_SIZE: usize = 64;
 
@@ -100,7 +101,7 @@ impl GapBuffer {
         Ok(())
     }
 
-    pub fn grow_gap(&mut self, required_size: usize) {
+    fn grow_gap(&mut self, required_size: usize) {
         let alloc_size = required_size + DEFAULT_GAP_SIZE;
         let old_size = self.buffer.len();
 
@@ -161,36 +162,91 @@ impl GapBuffer {
         self.buffer.get(real_index)
     }
 
-    pub fn chars(&'_ self) -> GapBufferIter<'_> {
-        GapBufferIter {
-            buff: self,
+    pub fn slice<R>(&self, range: R) -> GapBufferSlice<'_>
+    where
+        R: RangeBounds<usize>,
+    {
+        let start_index = match range.start_bound() {
+            Bound::Included(n) => *n,
+            Bound::Excluded(n) => *n + 1,
+            Bound::Unbounded => 0,
+        };
+
+        let end_index = match range.end_bound() {
+            Bound::Included(n) => *n + 1,
+            Bound::Excluded(n) => *n,
+            Bound::Unbounded => self.len(),
+        };
+
+        if end_index > self.len() {
+            panic!("Attempt to slice with a range past end of buffer.");
+        }
+
+        GapBufferSlice::new(self, start_index, end_index)
+    }
+
+    fn find_line(&self, line_num: usize) -> Option<usize> {
+        let mut line_count = 0;
+        let mut char_count = 0;
+        let mut chars = self.chars();
+
+        while line_count < line_num {
+            match chars.next() {
+                Some('\n') => {
+                    line_count += 1;
+                    char_count += 1
+                }
+                Some(_) => char_count += 1,
+                None => break,
+            }
+        }
+
+        if line_count == line_num {
+            Some(char_count)
+        } else {
+            None
+        }
+    }
+
+    pub fn chars(&'_ self) -> GapBufferChars<'_> {
+        GapBufferChars {
+            buff: self.slice(..),
             left_index: 0,
             right_index: self.len(),
         }
     }
 
-    pub fn chars_at(&'_ self, index: usize) -> GapBufferIter<'_> {
+    pub fn chars_at(&'_ self, index: usize) -> GapBufferChars<'_> {
         if index >= self.len() {
             panic!("Attempt to index past end of gap buffer.");
         }
 
-        GapBufferIter {
-            buff: self,
+        GapBufferChars {
+            buff: self.slice(..),
             left_index: index,
             right_index: self.len(),
         }
     }
 
-    pub fn chars_at_rev(&'_ self, index: usize) -> Rev<GapBufferIter<'_>> {
+    pub fn chars_at_rev(&'_ self, index: usize) -> Rev<GapBufferChars<'_>> {
         if index >= self.len() {
             panic!("Attempt to index past end of gap buffer.");
         }
-        GapBufferIter {
-            buff: self,
+        GapBufferChars {
+            buff: self.slice(..),
             left_index: 0,
             right_index: index + 1, // +1 because exclusive end
         }
         .rev()
+    }
+
+    pub fn lines_at(&self, line: usize) -> GapBufferLines<'_> {
+        GapBufferLines {
+            buff: self.slice(..),
+            // TODO: At some point I think I want to update lines_at and chars_at to return
+            // an Option
+            index: self.find_line(line).unwrap(),
+        }
     }
 
     /// Moving backwards from 'start', find the first instance of 'search_char'
@@ -198,12 +254,12 @@ impl GapBuffer {
     /// found at 'start', start will be returned. Panics if 'start' is past the
     /// end of the buffer.
     pub fn find_prev(&self, start: usize, search_char: char) -> Option<usize> {
-        for (idx, c) in self.chars_at_rev(start).enumerate() {
-            if *c != search_char {
+        for (index, c) in self.chars_at_rev(start).enumerate() {
+            if c != search_char {
                 continue;
             }
 
-            return Some(start - idx);
+            return Some(start - index);
         }
 
         None
@@ -230,34 +286,154 @@ impl std::fmt::Display for GapBuffer {
     }
 }
 
-pub struct GapBufferIter<'a> {
+#[derive(Debug, Clone)]
+pub struct GapBufferSlice<'a> {
     buff: &'a GapBuffer,
+    start_index: usize,
+    stop_index: usize,
+}
+
+impl<'a> GapBufferSlice<'a> {
+    pub fn new(buff: &'a GapBuffer, start: usize, stop: usize) -> GapBufferSlice<'a> {
+        GapBufferSlice {
+            buff: buff,
+            start_index: start,
+            stop_index: stop,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.stop_index - self.start_index
+    }
+
+    pub fn get(&self, index: usize) -> Option<&char> {
+        let real_index = index + self.start_index;
+        if real_index < self.stop_index {
+            self.buff.get(real_index)
+        } else {
+            None
+        }
+    }
+
+    pub fn chars(&self) -> GapBufferChars<'a> {
+        GapBufferChars {
+            buff: self.clone(),
+            left_index: 0,
+            right_index: self.len(),
+        }
+    }
+
+    pub fn chars_at(&self, index: usize) -> GapBufferChars<'a> {
+        if index >= self.len() {
+            panic!("Attempt to index past end of GapBuferSlice");
+        }
+
+        GapBufferChars {
+            buff: self.clone(),
+            left_index: index,
+            right_index: self.len(),
+        }
+    }
+
+    pub fn slice<R>(&self, range: R) -> GapBufferSlice<'a>
+    where
+        R: RangeBounds<usize>,
+    {
+        // TODO: pull this out in to a function
+        let start_index = match range.start_bound() {
+            Bound::Included(n) => *n,
+            Bound::Excluded(n) => *n + 1,
+            Bound::Unbounded => 0,
+        };
+
+        let end_index = match range.end_bound() {
+            Bound::Included(n) => *n + 1,
+            Bound::Excluded(n) => *n,
+            Bound::Unbounded => self.len(),
+        };
+
+        if end_index > self.len() {
+            panic!("Attempt to slice with a range past end of slice.");
+        }
+
+        GapBufferSlice::new(
+            self.buff,
+            self.start_index + start_index,
+            self.start_index + end_index,
+        )
+    }
+}
+
+pub struct GapBufferLines<'a> {
+    buff: GapBufferSlice<'a>,
+    // Char index, not line index
+    index: usize,
+}
+
+impl<'a> GapBufferLines<'a> {
+    pub fn new(buff: GapBufferSlice<'a>) -> GapBufferLines<'a> {
+        GapBufferLines {
+            buff: buff,
+            index: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for GapBufferLines<'a> {
+    type Item = GapBufferSlice<'a>;
+
+    #[inline]
+    fn next(&mut self) -> Option<GapBufferSlice<'a>> {
+        if self.index >= self.buff.len() {
+            return None;
+        }
+
+        for (offset, ch) in self.buff.chars_at(self.index).enumerate() {
+            if ch != '\n' {
+                continue;
+            }
+
+            let slice = self.buff.slice(self.index..self.index + offset);
+            // Skip past the newline char
+            self.index += offset + 1;
+            return Some(slice);
+        }
+
+        let slice = self.buff.slice(self.index..);
+        self.index = self.buff.len();
+
+        Some(slice)
+    }
+}
+
+pub struct GapBufferChars<'a> {
+    buff: GapBufferSlice<'a>,
     left_index: usize,
     right_index: usize,
 }
 
-impl<'a> Iterator for GapBufferIter<'a> {
-    type Item = &'a char;
+impl<'a> Iterator for GapBufferChars<'a> {
+    type Item = char;
 
     #[inline]
-    fn next(&mut self) -> Option<&'a char> {
+    fn next(&mut self) -> Option<char> {
         if self.left_index < self.right_index {
             let val = self.buff.get(self.left_index);
             self.left_index += 1;
-            val
+            val.copied()
         } else {
             None
         }
     }
 }
 
-impl<'a> DoubleEndedIterator for GapBufferIter<'a> {
+impl<'a> DoubleEndedIterator for GapBufferChars<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.left_index < self.right_index {
             self.right_index -= 1;
             let val = self.buff.get(self.right_index);
-            val
+            val.copied()
         } else {
             None
         }
@@ -424,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_idx_with_empty_buffer() {
+    fn test_get_index_with_empty_buffer() {
         let buf = GapBuffer::new();
 
         // If you try to index at gap_start, the valid char is really the one at gap_end
@@ -443,7 +619,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_idx_with_gap_at_end() {
+    fn test_get_index_with_gap_at_end() {
         let mut buf = GapBuffer::new();
         buf.insert("Hello, world.");
 
@@ -464,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_idx_with_gap_in_middle() {
+    fn test_get_index_with_gap_in_middle() {
         let mut buf = GapBuffer::new();
         buf.insert("Hello, world.");
         buf.move_cursor(6).expect("Should work");
@@ -489,7 +665,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_idx_with_gap_at_start() {
+    fn test_get_index_with_gap_at_start() {
         let mut buf = GapBuffer::new();
         buf.insert("Hello, world.");
         buf.move_cursor(0).expect("Should work");
@@ -523,16 +699,16 @@ mod tests {
         assert_eq!(buf.get(buf.gap_end), None);
 
         buf.move_cursor(5).expect("Should work");
-        // Valid idx before the gap
+        // Valid index before the gap
         assert_eq!(buf.get(1), Some(&'e'));
 
-        // valid idx (gap start)
+        // valid index (gap start)
         assert_eq!(buf.get(buf.gap_start), Some(&','));
 
-        // valid idx after the gap
+        // valid index after the gap
         assert_eq!(buf.get(7), Some(&'w'));
 
-        // invalid idx after the gap
+        // invalid index after the gap
         assert_eq!(buf.get(buf.gap_end), None);
         assert_eq!(buf.get(30), None);
     }
@@ -676,5 +852,201 @@ mod tests {
         buf.insert("hello");
         assert_eq!(buf.find_prev(0, 'x'), None);
         assert_eq!(buf.find_prev(4, 'x'), None);
+    }
+
+    #[test]
+    fn test_slice() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        let slice = buf.slice(..);
+        assert_eq!(slice.chars().collect::<String>(), "hello");
+
+        let slice = buf.slice(0..4);
+        assert_eq!(slice.chars().collect::<String>(), "hell");
+
+        let slice = buf.slice(0..5);
+        assert_eq!(slice.chars().collect::<String>(), "hello");
+
+        let slice = buf.slice(0..0);
+        assert_eq!(slice.chars().collect::<String>(), "");
+
+        let slice = buf.slice(1..2);
+        assert_eq!(slice.chars().collect::<String>(), "e");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_past_end() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        let _ = buf.slice(..20);
+    }
+
+    #[test]
+    fn test_slice_of_slice() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello, world");
+        let parent_slice = buf.slice(..);
+
+        let child = parent_slice.slice(..5);
+        assert_eq!(child.chars().collect::<String>(), "hello");
+
+        let child = parent_slice.slice(7..);
+        assert_eq!(child.chars().collect::<String>(), "world");
+
+        let parent_slice = buf.slice(1..6);
+        let child = parent_slice.slice(..);
+        assert_eq!(child.chars().collect::<String>(), "ello,");
+
+        let child = parent_slice.slice(1..2);
+        assert_eq!(child.chars().collect::<String>(), "l");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_slice_of_slice_past_end() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        let parent_slice = buf.slice(..);
+        let _ = parent_slice.slice(..20);
+    }
+
+    #[test]
+    fn test_line_iter() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello\nworld");
+        let mut lines_iter = GapBufferLines::new(buf.slice(..));
+
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "world"
+        );
+        assert!(lines_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_line_iter_one_line() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        let mut lines_iter = GapBufferLines::new(buf.slice(..));
+
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert!(lines_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_line_iter_many_lines() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello\nworld\ntest\n");
+        let mut lines_iter = GapBufferLines::new(buf.slice(..));
+
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "world"
+        );
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "test"
+        );
+        assert!(lines_iter.next().is_none());
+        assert!(lines_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_line_iter_empty_buffer() {
+        let buf = GapBuffer::new();
+        let mut lines_iter = GapBufferLines::new(buf.slice(..));
+        assert!(lines_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_line_iter_empty_lines() {
+        let mut buf = GapBuffer::new();
+        buf.insert("\n\nhello\n");
+        let mut lines_iter = GapBufferLines::new(buf.slice(..));
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert!(lines_iter.next().is_none());
+    }
+
+    #[test]
+    fn test_lines_at() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello\nworld\ngoodbye");
+
+        let mut iter = buf.lines_at(0);
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "hello");
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "world");
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "goodbye");
+        assert!(iter.next().is_none());
+
+        let mut iter = buf.lines_at(1);
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "world");
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "goodbye");
+        assert!(iter.next().is_none());
+
+        let mut iter = buf.lines_at(2);
+        assert_eq!(iter.next().unwrap().chars().collect::<String>(), "goodbye");
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_lines_at_past_end() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello\nworld\ngoodbye");
+
+        buf.lines_at(3);
+    }
+
+    #[test]
+    fn test_lines_at_empty_buffer() {
+        let buf = GapBuffer::new();
+        let mut iter = buf.lines_at(0);
+        assert!(iter.next().is_none());
+    }
+
+    #[test]
+    fn test_lines_at_empty_lines() {
+        let mut buf = GapBuffer::new();
+        buf.insert("\n\nhello\n");
+        let mut lines_iter = buf.lines_at(0);
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert!(lines_iter.next().is_none());
+
+        let mut lines_iter = buf.lines_at(1);
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert!(lines_iter.next().is_none());
+
+        let mut lines_iter = buf.lines_at(2);
+        assert_eq!(
+            lines_iter.next().unwrap().chars().collect::<String>(),
+            "hello"
+        );
+        assert!(lines_iter.next().is_none());
     }
 }

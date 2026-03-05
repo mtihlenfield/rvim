@@ -2,9 +2,9 @@ use crossterm::event;
 use crossterm::terminal;
 use log::{error, info};
 use log4rs;
-use std::panic;
 
 mod gap_buf;
+mod position;
 mod screen;
 mod state;
 

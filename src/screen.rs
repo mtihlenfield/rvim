@@ -2,13 +2,22 @@ use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
 use log::warn;
 use std::io::{Stdout, Write, stdout};
 
+use crate::position::Position;
 use crate::state;
 
-struct BufferView {}
+struct BufferView {
+    anchor: Position,
+}
 
 impl BufferView {
     pub fn new() -> BufferView {
-        BufferView {}
+        BufferView {
+            anchor: Position::new(),
+        }
+    }
+
+    fn update_anchor(&mut self, global_cursor: &state::Cursor) {
+        // TODO: Do diff between anchor rows and cursor rows, then move the anchor by the diff
     }
 
     pub fn update(
@@ -16,22 +25,38 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         new_state: &state::EditorState,
     ) -> std::io::Result<()> {
+        self.update_anchor(&new_state.buffer.cursor);
+
         let mut row = 0;
         let mut col = 0;
-        for c in new_state.buffer.iter() {
-            if *c == '\n' || col >= screen_buf.cols {
-                row += 1;
-                col = 0;
-                continue;
+        // TODO: right now this is an log(n) search through the buffer - way too inefficient
+        for line in new_state.buffer.lines_at(self.anchor.row) {
+            for ch in line.chars() {
+                if col >= screen_buf.cols {
+                    row += 1;
+                    col = 0;
+                    continue;
+                }
+
+                screen_buf.write(row, col, ch);
+                col += 1;
             }
 
-            screen_buf.write(row, col, *c);
-            col += 1;
+            row += 1;
         }
 
         for empty_row in row + 1..screen_buf.rows - 1 {
             screen_buf.write(empty_row, 0, '~');
         }
+
+        // TODO: move the cursor if in insert or normal mode.
+        // match new_state.mode {
+        //     state::Mode::Insert | state::Mode::Normal => {
+        //         let cursor = new_state.buffer.cursor.clone();
+        //         out.queue(cursor::MoveTo(cursor.viewport_col(), cursor.viewport_row()))?;
+        //     }
+        //     _ => {}
+        // };
 
         Ok(())
     }
@@ -142,13 +167,6 @@ impl Screen {
         self.buffer_view.update(&mut self.screen_buf, new_state)?;
         self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
-        match new_state.mode {
-            state::Mode::Insert | state::Mode::Normal => {
-                let cursor = new_state.buffer.cursor.clone();
-                out.queue(cursor::MoveTo(cursor.viewport_col(), cursor.viewport_row()))?;
-            }
-            _ => {}
-        };
         out.flush()
     }
 }

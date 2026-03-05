@@ -55,15 +55,25 @@ Small, mostly featureless, vim implementation in Rust. Just built for learning R
 
 - Main loop listens for events, updates the model, and then passes that to the view
 
-### 
-Delete scenarios:
+### Insert Mode Delete scenarios:
 
 - Current pos: 
     - start of line
         - Need to delete the \n and move up to end of the next line
             - How do I determine what the new global offset is?
-                - It's just current - 1
+                - It's just current - 1, unless the char you just deleted was the 
+                the last char and was a newline
     - middle of line
         - just delete the char and move left 1
     - end of line
         - just delete the char and move left 1
+
+### Viewport Moving
+
+- Need an anchor position that is not the cursor
+- Should probably the top left of the viewport
+    - So would be (0,0) in viewport terms, but somewhere in global terms
+- in insert mode:
+    - if the global cursor row is > anchor_row + viewport_rows, move the viewport down one
+    - if the global cursor row is <  anchor_row, move the viewport up one
+- Does the buffer need to track the viewport if we do it this way? Anchor pos should be global, and then viewport cursor pos can be determined relative to the anchor
