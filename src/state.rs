@@ -130,6 +130,26 @@ impl Buffer {
     pub fn lines_at(&'_ self, line_num: usize) -> BufferLines<'_> {
         self.buf.lines_at(line_num)
     }
+
+    pub fn move_right(&mut self) {
+        if let Some(ch) = self.buf.get(self.cursor.offset + 1)
+            && *ch != '\n'
+        {
+            self.cursor.right();
+        }
+    }
+
+    pub fn move_left(&mut self) {
+        if self.cursor.offset == 0 {
+            return;
+        }
+
+        if let Some(ch) = self.buf.get(self.cursor.offset - 1)
+            && *ch != '\n'
+        {
+            self.cursor.left();
+        }
+    }
 }
 
 pub struct EditorState {
@@ -158,6 +178,14 @@ impl EditorState {
                 'i' => {
                     self.mode = Mode::Insert;
                     info!("Switching to Insert mode.");
+                    false
+                }
+                'l' => {
+                    self.buffer.move_right();
+                    false
+                }
+                'h' => {
+                    self.buffer.move_left();
                     false
                 }
                 _ => false,
