@@ -14,6 +14,7 @@ fn main() {
 
     info!("Starting rvim.");
     let (cols, rows) = terminal::size().expect("Failed to get term size.");
+    info!("Term size - rows: {}, cols: {}", rows, cols);
     let mut screen = screen::Screen::new(rows, cols);
     let mut state = state::EditorState::new(rows, cols);
     screen.update(&state).expect("Failed to init screen.");

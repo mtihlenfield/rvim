@@ -42,7 +42,9 @@ impl std::error::Error for GapBufferError {}
 
 #[derive(Debug)]
 pub struct GapBuffer {
-    // TODO: using char means I'm using 4x memory than a u8...
+    // TODO: using char means I'm using 4x memory than a u8... Probably should change it
+    // eventually but it does simplify the interface and I think makes it faster since we can
+    // index straight in to the char array instead of finding utf-8 boundaries.
     buffer: Vec<char>,
     gap_start: usize,
     gap_end: usize,

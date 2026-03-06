@@ -47,10 +47,12 @@ impl Cursor {
         self.offset -= 1;
     }
 
-    /// Return the current global column. Note that this should be the same
-    /// as the window column. This just returns a usize instead of u16.
     pub fn col(&self) -> usize {
         self.pos.col
+    }
+
+    pub fn row(&self) -> usize {
+        self.pos.row
     }
 }
 

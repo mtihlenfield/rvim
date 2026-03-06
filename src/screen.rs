@@ -1,5 +1,5 @@
 use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
-use log::warn;
+use log::{info, warn};
 use std::io::{Stdout, Write, stdout};
 
 use crate::position::Position;
@@ -7,17 +7,27 @@ use crate::state;
 
 struct BufferView {
     anchor: Position,
+    cursor: Position,
 }
 
 impl BufferView {
     pub fn new() -> BufferView {
         BufferView {
             anchor: Position::new(),
+            cursor: Position::new(),
         }
     }
 
-    fn update_anchor(&mut self, global_cursor: &state::Cursor) {
-        // TODO: Do diff between anchor rows and cursor rows, then move the anchor by the diff
+    fn update_anchor(&mut self, screen_buf: &ScreenBuf, global_cursor: &state::Cursor) {
+        // Given the current anchor position and the screen buff size, we should be able to
+        // determine if the current cursor can fit is in the view.
+        //
+        // If we determine that we can't fit it in the view, we probably have to scan from the
+        // anchor to the cursor to see how many screen lines we need. As we walk we keep track of
+        // the screen line and the global line.
+        //
+        // Then we walk back from the cursor. We want to anchor on the first which we can
+        // completely display.
     }
 
     pub fn update(
@@ -25,17 +35,29 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         new_state: &state::EditorState,
     ) -> std::io::Result<()> {
-        self.update_anchor(&new_state.buffer.cursor);
+        let max_col = screen_buf.cols - 1;
+        let max_row = screen_buf.rows - 1;
+        self.update_anchor(screen_buf, &new_state.buffer.cursor);
 
-        let mut row = 0;
-        let mut col = 0;
+        // For now we will set the cursor match the global cursor, but we may have to update
+        // it if the line is long enough to wrap around
+        self.cursor.col = new_state.buffer.cursor.col();
+        // We've moved the anchor at this point, so it's safe to assume that the cursor
+        // row is greater than the anchor row
+        self.cursor.row = new_state.buffer.cursor.row() - self.anchor.row;
+
+        let mut row: u16 = 0;
+        let mut col: u16 = 0;
         // TODO: right now this is an log(n) search through the buffer - way too inefficient
         for line in new_state.buffer.lines_at(self.anchor.row) {
+            if row > screen_buf.rows {
+                break;
+            }
+
             for ch in line.chars() {
-                if col >= screen_buf.cols {
+                if col > max_col {
                     row += 1;
                     col = 0;
-                    continue;
                 }
 
                 screen_buf.write(row, col, ch);
@@ -43,20 +65,21 @@ impl BufferView {
             }
 
             row += 1;
+            col = 0;
+
+            if row > max_row {
+                break;
+            }
         }
 
-        for empty_row in row + 1..screen_buf.rows - 1 {
+        // TODO: update the cursor. Where we place it depends on partially on:
+        // a) the mode
+        // b) what line wraparounds happened. We probably need to track wraparounds that
+        // occurred on a line <= the cursor row
+
+        for empty_row in row..screen_buf.rows - 1 {
             screen_buf.write(empty_row, 0, '~');
         }
-
-        // TODO: move the cursor if in insert or normal mode.
-        // match new_state.mode {
-        //     state::Mode::Insert | state::Mode::Normal => {
-        //         let cursor = new_state.buffer.cursor.clone();
-        //         out.queue(cursor::MoveTo(cursor.viewport_col(), cursor.viewport_row()))?;
-        //     }
-        //     _ => {}
-        // };
 
         Ok(())
     }
@@ -76,7 +99,7 @@ impl StatusView {
     ) -> std::io::Result<()> {
         match new_state.mode {
             state::Mode::Insert => {
-                for (i, c) in "-- Insert --".chars().enumerate() {
+                for (i, c) in "-- INSERT --".chars().enumerate() {
                     screen_buf.write(screen_buf.rows - 1, i as u16, c);
                 }
 
@@ -167,6 +190,13 @@ impl Screen {
         self.buffer_view.update(&mut self.screen_buf, new_state)?;
         self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
+        let cursor = match new_state.mode {
+            state::Mode::Insert | state::Mode::Normal => self.buffer_view.cursor.clone(),
+            _ => Position::new(),
+        };
+
+        out.queue(cursor::MoveTo(cursor.col as u16, cursor.row as u16))?;
+
         out.flush()
     }
 }
