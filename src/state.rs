@@ -64,27 +64,31 @@ pub struct BufferError(String);
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
     pub cursor: Cursor,
-    view_rows: u16,
-    view_cols: u16,
 }
 
 impl Buffer {
-    pub fn new(view_rows: u16, view_cols: u16) -> Buffer {
+    pub fn new() -> Buffer {
         Buffer {
             buf: gap_buf::GapBuffer::new(),
             cursor: Cursor::new(),
-            // TODO: I'd like to get rid of view rows/cols and just have the cursor be global. Let
-            // the screen code handle wrapping and what not
-            view_rows: view_rows,
-            view_cols: view_cols,
         }
+    }
+
+    pub fn from_file(path: &str) -> Result<Buffer, std::io::Error> {
+        let s = std::fs::read_to_string(path)?;
+        let buf = Buffer {
+            buf: s.as_str().into(),
+            cursor: Cursor::new(),
+        };
+
+        Ok(buf)
     }
 
     pub fn insert(&mut self, c: char) {
         // TODO: having to convert to string may not be a very good api
         self.buf.insert(&c.to_string());
 
-        if c == '\n' || self.cursor.col() >= self.view_cols.into() {
+        if c == '\n' {
             self.cursor.newline();
         } else {
             self.cursor.right();
@@ -134,11 +138,17 @@ pub struct EditorState {
 }
 
 impl EditorState {
-    pub fn new(view_rows: u16, view_cols: u16) -> EditorState {
+    pub fn new() -> EditorState {
         EditorState {
             mode: Mode::Normal,
-            buffer: Buffer::new(view_rows, view_cols),
+            buffer: Buffer::new(),
         }
+    }
+
+    pub fn open_file(&mut self, path: &str) -> Result<(), std::io::Error> {
+        self.buffer = Buffer::from_file(path)?;
+
+        Ok(())
     }
 
     pub fn handle_normal_update(&mut self, key_ev: event::KeyEvent) -> bool {

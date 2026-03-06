@@ -288,6 +288,20 @@ impl std::fmt::Display for GapBuffer {
     }
 }
 
+impl From<&str> for GapBuffer {
+    fn from(s: &str) -> Self {
+        let chars: Vec<char> = s.chars().collect();
+        let gap_size = DEFAULT_GAP_SIZE;
+        let mut buffer = chars.clone();
+        buffer.resize(chars.len() + gap_size, '\0');
+        GapBuffer {
+            buffer,
+            gap_start: chars.len(),
+            gap_end: chars.len() + gap_size,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GapBufferSlice<'a> {
     buff: &'a GapBuffer,
@@ -575,6 +589,14 @@ mod tests {
         let more = "b".repeat(DEFAULT_GAP_SIZE);
         buf.insert_at(&more, 16).expect("Should work");
         assert_eq!(buf.to_string(), "a".repeat(16) + &more + &"a".repeat(16));
+    }
+
+    #[test]
+    fn test_from() {
+        let s = "Hello, world";
+
+        let buff: GapBuffer = s.into();
+        assert_eq!(buff.chars().collect::<String>(), s);
     }
 
     #[test]
