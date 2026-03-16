@@ -26,4 +26,9 @@ impl Position {
         self.col = col;
         self.row -= 1;
     }
+
+    pub fn down(&mut self, col: usize) {
+        self.col = col;
+        self.row += 1;
+    }
 }

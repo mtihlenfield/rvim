@@ -15,6 +15,10 @@ Small, mostly featureless, vim implementation in Rust. Just built for learning R
 
 - If I have time:
     - Visual mode
+    - Use u8 as underlying type in gap buffer instead of char to improve memory
+    footprint
+    - Line cache/storage for faster line access
+    - Correct handling of tabs (\t)
     - Signcolumn (left bar)
         - line numbers?
         - signs?

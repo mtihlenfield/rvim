@@ -50,7 +50,8 @@ impl BufferView {
         let mut col: u16 = 0;
         // TODO: right now this is an log(n) search through the buffer - way too inefficient
         for line in new_state.buffer.lines_at(self.anchor.row) {
-            if row > screen_buf.rows {
+            // preserve the last row for the status line
+            if row > max_row - 1 {
                 break;
             }
 

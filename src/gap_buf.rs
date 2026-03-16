@@ -159,9 +159,14 @@ impl GapBuffer {
         }
     }
 
-    pub fn get(&self, index: usize) -> Option<&char> {
+    pub fn get(&self, index: usize) -> Option<char> {
         let real_index = self.translate_index(index);
-        self.buffer.get(real_index)
+        self.buffer.get(real_index).copied()
+    }
+
+    pub fn get_coord(&self, row: usize, col: usize) -> Option<char> {
+        let line = self.line_at(row)?;
+        line.get(col)
     }
 
     pub fn slice<R>(&self, range: R) -> GapBufferSlice<'_>
@@ -242,6 +247,22 @@ impl GapBuffer {
         .rev()
     }
 
+    fn line_length(&self, start_index: usize) -> usize {
+        (start_index..)
+            .map(|i| self.buffer.get(i))
+            .take_while(|ch| matches!(ch, Some(c) if **c != '\n'))
+            .count()
+    }
+
+    pub fn line_at(&self, line: usize) -> Option<GapBufferSlice> {
+        let start_index = self.find_line(line)?;
+        Some(GapBufferSlice {
+            buff: self,
+            start_index: start_index,
+            stop_index: start_index + self.line_length(start_index),
+        })
+    }
+
     pub fn lines_at(&self, line: usize) -> GapBufferLines<'_> {
         GapBufferLines {
             buff: self.slice(..),
@@ -262,6 +283,22 @@ impl GapBuffer {
             }
 
             return Some(start - index);
+        }
+
+        None
+    }
+
+    /// Moving forwards from 'start', find the first instance of 'search_char'
+    /// and return it's index. The search range is inclusive: if the search_char is
+    /// found at 'start', start will be returned. Panics if 'start' is past the
+    /// end of the buffer.
+    pub fn find_next(&self, start: usize, search_char: char) -> Option<usize> {
+        for (index, c) in self.chars_at(start).enumerate() {
+            if c != search_char {
+                continue;
+            }
+
+            return Some(start + index);
         }
 
         None
@@ -322,7 +359,7 @@ impl<'a> GapBufferSlice<'a> {
         self.stop_index - self.start_index
     }
 
-    pub fn get(&self, index: usize) -> Option<&char> {
+    pub fn get(&self, index: usize) -> Option<char> {
         let real_index = index + self.start_index;
         if real_index < self.stop_index {
             self.buff.get(real_index)
@@ -436,7 +473,7 @@ impl<'a> Iterator for GapBufferChars<'a> {
         if self.left_index < self.right_index {
             let val = self.buff.get(self.left_index);
             self.left_index += 1;
-            val.copied()
+            val
         } else {
             None
         }
@@ -449,7 +486,7 @@ impl<'a> DoubleEndedIterator for GapBufferChars<'a> {
         if self.left_index < self.right_index {
             self.right_index -= 1;
             let val = self.buff.get(self.right_index);
-            val.copied()
+            val
         } else {
             None
         }
@@ -718,19 +755,19 @@ mod tests {
         let hello = String::from("Hello, world");
         buf.insert(&hello);
 
-        assert_eq!(buf.get(5), Some(&','));
+        assert_eq!(buf.get(5), Some(','));
         assert_eq!(buf.get(buf.gap_start), None);
         assert_eq!(buf.get(buf.gap_end), None);
 
         buf.move_cursor(5).expect("Should work");
         // Valid index before the gap
-        assert_eq!(buf.get(1), Some(&'e'));
+        assert_eq!(buf.get(1), Some('e'));
 
         // valid index (gap start)
-        assert_eq!(buf.get(buf.gap_start), Some(&','));
+        assert_eq!(buf.get(buf.gap_start), Some(','));
 
         // valid index after the gap
-        assert_eq!(buf.get(7), Some(&'w'));
+        assert_eq!(buf.get(7), Some('w'));
 
         // invalid index after the gap
         assert_eq!(buf.get(buf.gap_end), None);
@@ -842,6 +879,40 @@ mod tests {
         buf.move_cursor(0).expect("Should work");
         let new_str: String = buf.chars_at_rev(5).collect();
         assert_eq!(new_str, ",olleH");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_find_next_empty_buffer() {
+        let buf = GapBuffer::new();
+        assert_eq!(buf.find_next(0, 'c'), None);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_find_next_bad_index() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_next(10, 'c'), None);
+    }
+
+    #[test]
+    fn test_find_next_with_match() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_next(0, 'h'), Some(0));
+        assert_eq!(buf.find_next(4, 'o'), Some(4));
+        assert_eq!(buf.find_next(0, 'e'), Some(1));
+        assert_eq!(buf.find_next(1, 'l'), Some(2));
+        assert_eq!(buf.find_next(4, 'e'), None);
+    }
+
+    #[test]
+    fn test_find_next_without_match() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_next(0, 'x'), None);
+        assert_eq!(buf.find_next(4, 'x'), None);
     }
 
     #[test]

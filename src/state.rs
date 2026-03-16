@@ -12,7 +12,7 @@ pub enum Mode {
 #[derive(Debug, Clone)]
 pub struct Cursor {
     pos: Position,
-    offset: usize,
+    preffered_col: usize,
 }
 
 impl Cursor {
@@ -20,31 +20,40 @@ impl Cursor {
         Cursor {
             // The position relative to the start of the buffer contents
             pos: Position::new(),
-            // The global position as an index in to the buffer contents
-            // TODO: Do I need this? Can I do pos.rows * pos.cols? The question is
-            // how newlines are handled.
-            offset: 0,
+            preffered_col: 0,
         }
     }
 
     pub fn newline(&mut self) {
         self.pos.newline();
-        self.offset += 1;
     }
 
     pub fn right(&mut self) {
         self.pos.right();
-        self.offset += 1;
+        self.preffered_col += 1;
     }
 
     pub fn left(&mut self) {
         self.pos.left();
-        self.offset -= 1;
+        self.preffered_col -= 1;
     }
 
-    pub fn up(&mut self, col: usize) {
-        self.pos.up(col);
-        self.offset -= 1;
+    fn adjust_col(&self, line_len: usize) -> usize {
+        if line_len == 0 {
+            0
+        } else if self.preffered_col >= line_len {
+            line_len - 1
+        } else {
+            self.preffered_col
+        }
+    }
+
+    pub fn up(&mut self, line_len: usize) {
+        self.pos.up(self.adjust_col(line_len));
+    }
+
+    pub fn down(&mut self, line_len: usize) {
+        self.pos.down(self.adjust_col(line_len));
     }
 
     pub fn col(&self) -> usize {
@@ -85,7 +94,6 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, c: char) {
-        // TODO: having to convert to string may not be a very good api
         self.buf.insert(&c.to_string());
 
         if c == '\n' {
@@ -98,28 +106,7 @@ impl Buffer {
     pub fn delete(&mut self) -> Result<(), BufferError> {
         match self.buf.delete() {
             Ok(()) => {
-                // Note that we *know* at this point that we aren't at the very start of the
-                // buffer. If we were we would have gotten a DeleteFromStart error.
-                if self.cursor.col() == 0 {
-                    // Subtracting 1 from the global cursor offset because we deleted
-                    // a char but haven't updated the cursor yet, so it is out of date.
-                    let cur_offset = self.cursor.offset - 1;
-
-                    // Subtracting 1 here because the cursor is always one past the char
-                    // that is being deleted
-                    if cur_offset != 0
-                        && let Some(prev_line_end) = self.buf.find_prev(cur_offset - 1, '\n')
-                    {
-                        let len = cur_offset - prev_line_end - 1;
-                        self.cursor.up(len);
-                    } else {
-                        // We're on the first line, so we just set the cursor to the length
-                        // of the buffer
-                        self.cursor.up(cur_offset);
-                    }
-                } else {
-                    self.cursor.left();
-                }
+                //  TODO: move the cursor
                 Ok(())
             }
             Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),
@@ -132,22 +119,30 @@ impl Buffer {
     }
 
     pub fn move_right(&mut self) {
-        if let Some(ch) = self.buf.get(self.cursor.offset + 1)
-            && *ch != '\n'
+        if let Some(ch) = self.buf.get_coord(self.cursor.row(), self.cursor.col() + 1)
+            && ch != '\n'
         {
             self.cursor.right();
         }
     }
 
     pub fn move_left(&mut self) {
-        if self.cursor.offset == 0 {
+        if self.cursor.col() == 0 {
             return;
         }
 
-        if let Some(ch) = self.buf.get(self.cursor.offset - 1)
-            && *ch != '\n'
-        {
-            self.cursor.left();
+        self.cursor.left();
+    }
+
+    pub fn move_down(&mut self) {
+        if let Some(line) = self.buf.line_at(self.cursor.row() + 1) {
+            self.cursor.down(line.len());
+        }
+    }
+
+    pub fn move_up(&mut self) {
+        if let Some(line) = self.buf.line_at(self.cursor.row() - 1) {
+            self.cursor.up(line.len());
         }
     }
 }
@@ -186,6 +181,14 @@ impl EditorState {
                 }
                 'h' => {
                     self.buffer.move_left();
+                    false
+                }
+                'j' => {
+                    self.buffer.move_down();
+                    false
+                }
+                'k' => {
+                    self.buffer.move_up();
                     false
                 }
                 _ => false,
