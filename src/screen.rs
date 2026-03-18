@@ -1,5 +1,5 @@
 use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
-use log::{info, warn};
+use log::warn;
 use std::io::{Stdout, Write, stdout};
 
 use crate::position::Position;
@@ -18,38 +18,80 @@ impl BufferView {
         }
     }
 
-    fn update_anchor(&mut self, screen_buf: &ScreenBuf, global_cursor: &state::Cursor) {
-        // Given the current anchor position and the screen buff size, we should be able to
-        // determine if the current cursor can fit is in the view.
-        //
-        // If we determine that we can't fit it in the view, we probably have to scan from the
-        // anchor to the cursor to see how many screen lines we need. As we walk we keep track of
-        // the screen line and the global line.
-        //
-        // Then we walk back from the cursor. We want to anchor on the first which we can
-        // completely display.
+    fn update_anchor(&mut self, screen_buf: &ScreenBuf, buffer: &state::Buffer) {
+        // TODO: what about a case where the file is one long line that is larger than the
+        // screen buff? To handle this, we probably need ot actually use the cols part of the
+        // anchor to track which part of the line we are at. Should basically always be 0 except in
+        // this one case.
+        let global_cursor_row = buffer.cursor.row();
+        let cols = screen_buf.cols;
+        let rows = screen_buf.rows;
+
+        // Check if cursor is above the anchor
+        if global_cursor_row <= self.anchor.row {
+            self.anchor.row = global_cursor_row;
+            return;
+        }
+
+        // Count the number of screen lines between the anchor and the cursor.
+        let screen_lines_to_cursor: usize = buffer
+            .lines_at(self.anchor.row)
+            .expect(&format!("Buffer has no line {}", self.anchor.row))
+            .take(global_cursor_row - self.anchor.row + 1)
+            .map(|line| line.len().div_ceil(cols as usize))
+            .sum();
+
+        if screen_lines_to_cursor <= rows as usize {
+            // Cursor is within the visible window, nothing to do
+            return;
+        }
+
+        let mut screen_line_count = 0;
+        let mut line_count = 0;
+        let mut move_anchor = false;
+        let iter = buffer
+            .lines_at_rev(global_cursor_row)
+            .expect("Buffer has no line {global_cursor_row}");
+        for line in iter {
+            screen_line_count += line.len().div_ceil(screen_buf.cols as usize);
+            if screen_line_count > screen_buf.rows as usize {
+                move_anchor = true;
+                break;
+            }
+
+            line_count += 1;
+        }
+
+        if !move_anchor {
+            return;
+        }
+
+        self.anchor.row = global_cursor_row - line_count;
     }
 
     pub fn update(
         &mut self,
         screen_buf: &mut ScreenBuf,
-        new_state: &state::EditorState,
+        buffer_state: &state::Buffer,
     ) -> std::io::Result<()> {
         let max_col = screen_buf.cols - 1;
         let max_row = screen_buf.rows - 1;
-        self.update_anchor(screen_buf, &new_state.buffer.cursor);
+        self.update_anchor(screen_buf, &buffer_state);
 
         // For now we will set the cursor match the global cursor, but we may have to update
         // it if the line is long enough to wrap around
-        self.cursor.col = new_state.buffer.cursor.col();
+        self.cursor.col = buffer_state.cursor.col();
         // We've moved the anchor at this point, so it's safe to assume that the cursor
         // row is greater than the anchor row
-        self.cursor.row = new_state.buffer.cursor.row() - self.anchor.row;
+        self.cursor.row = buffer_state.cursor.row() - self.anchor.row;
 
         let mut row: u16 = 0;
         let mut col: u16 = 0;
+        let iter = buffer_state
+            .lines_at(self.anchor.row)
+            .expect(&format!("Buffer has no line {}", self.anchor.row));
         // TODO: right now this is an log(n) search through the buffer - way too inefficient
-        for line in new_state.buffer.lines_at(self.anchor.row) {
+        for line in iter {
             // preserve the last row for the status line
             if row > max_row - 1 {
                 break;
@@ -76,7 +118,7 @@ impl BufferView {
         // TODO: update the cursor. Where we place it depends on partially on:
         // a) the mode
         // b) what line wraparounds happened. We probably need to track wraparounds that
-        // occurred on a line <= the cursor row
+        // occurred on a line <= the cursor row. Right now wraparounds are not handled at all.
 
         for empty_row in row..screen_buf.rows - 1 {
             screen_buf.write(empty_row, 0, '~');
@@ -188,7 +230,8 @@ impl Screen {
         }
 
         self.screen_buf.clear();
-        self.buffer_view.update(&mut self.screen_buf, new_state)?;
+        self.buffer_view
+            .update(&mut self.screen_buf, &new_state.buffer)?;
         self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
         let cursor = match new_state.mode {

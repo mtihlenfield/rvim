@@ -2,6 +2,7 @@ use crate::gap_buf;
 use crate::position::Position;
 use crossterm::event;
 use log::info;
+use std::iter::Rev;
 
 pub enum Mode {
     Normal,
@@ -65,7 +66,7 @@ impl Cursor {
     }
 }
 
-type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
+pub type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
 
 #[derive(Debug)]
 pub struct BufferError(String);
@@ -114,8 +115,12 @@ impl Buffer {
         }
     }
 
-    pub fn lines_at(&'_ self, line_num: usize) -> BufferLines<'_> {
+    pub fn lines_at(&'_ self, line_num: usize) -> Option<BufferLines<'_>> {
         self.buf.lines_at(line_num)
+    }
+
+    pub fn lines_at_rev(&'_ self, line_num: usize) -> Option<Rev<BufferLines<'_>>> {
+        self.buf.lines_at_rev(line_num)
     }
 
     pub fn move_right(&mut self) {
@@ -141,6 +146,10 @@ impl Buffer {
     }
 
     pub fn move_up(&mut self) {
+        if self.cursor.row() == 0 {
+            return;
+        }
+
         if let Some(line) = self.buf.line_at(self.cursor.row() - 1) {
             self.cursor.up(line.len());
         }
