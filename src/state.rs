@@ -12,61 +12,43 @@ pub enum Mode {
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    pos: Position,
+    pub index: usize,
     preffered_col: usize,
 }
 
 impl Cursor {
     pub fn new() -> Cursor {
         Cursor {
-            // The position relative to the start of the buffer contents
-            pos: Position::new(),
+            index: 0,
             preffered_col: 0,
         }
     }
 
-    pub fn newline(&mut self) {
-        self.pos.newline();
-    }
-
     pub fn right(&mut self) {
-        self.pos.right();
+        self.index += 1;
         self.preffered_col += 1;
     }
 
     pub fn left(&mut self) {
-        self.pos.left();
+        self.index -= 1;
         self.preffered_col -= 1;
     }
 
     fn adjust_col(&self, line_len: usize) -> usize {
-        if line_len == 0 {
-            0
-        } else if self.preffered_col >= line_len {
-            line_len - 1
+        if self.preffered_col >= line_len {
+            line_len.saturating_sub(1)
         } else {
             self.preffered_col
         }
     }
 
-    pub fn up(&mut self, line_len: usize) {
-        self.pos.up(self.adjust_col(line_len));
-    }
-
-    pub fn down(&mut self, line_len: usize) {
-        self.pos.down(self.adjust_col(line_len));
-    }
-
-    pub fn col(&self) -> usize {
-        self.pos.col
-    }
-
-    pub fn row(&self) -> usize {
-        self.pos.row
+    pub fn move_line(&mut self, line_index: usize, line_len: usize) {
+        self.index = line_index + self.adjust_col(line_len);
     }
 }
 
-pub type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
+// pub type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
+pub type BufferChars<'a> = gap_buf::GapBufferChars<'a>;
 
 #[derive(Debug)]
 pub struct BufferError(String);
@@ -94,14 +76,18 @@ impl Buffer {
         Ok(buf)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
+
     pub fn insert(&mut self, c: char) {
         self.buf.insert(&c.to_string());
 
-        if c == '\n' {
-            self.cursor.newline();
-        } else {
-            self.cursor.right();
-        }
+        // if c == '\n' {
+        //     self.cursor.newline();
+        // } else {
+        //     self.cursor.right();
+        // }
     }
 
     pub fn delete(&mut self) -> Result<(), BufferError> {
@@ -115,16 +101,25 @@ impl Buffer {
         }
     }
 
-    pub fn lines_at(&'_ self, line_num: usize) -> Option<BufferLines<'_>> {
-        self.buf.lines_at(line_num)
+    pub fn chars_at(&'_ self, index: usize) -> BufferChars<'_> {
+        self.buf.chars_at(index)
     }
 
-    pub fn lines_at_rev(&'_ self, line_num: usize) -> Option<Rev<BufferLines<'_>>> {
-        self.buf.lines_at_rev(line_num)
-    }
+    // pub fn lines_at(&'_ self, line_num: usize) -> Option<BufferLines<'_>> {
+    //     self.buf.lines_at(line_num)
+    // }
+
+    // pub fn lines_at_rev(&'_ self, line_num: usize) -> Option<Rev<BufferLines<'_>>> {
+    //     self.buf.lines_at_rev(line_num)
+    // }
 
     pub fn move_right(&mut self) {
-        if let Some(ch) = self.buf.get_coord(self.cursor.row(), self.cursor.col() + 1)
+        if self.buf.get(self.cursor.index) == Some('\n') {
+            // cursor is on an empty line
+            return;
+        }
+
+        if let Some(ch) = self.buf.get(self.cursor.index + 1)
             && ch != '\n'
         {
             self.cursor.right();
@@ -132,7 +127,7 @@ impl Buffer {
     }
 
     pub fn move_left(&mut self) {
-        if self.cursor.col() == 0 {
+        if self.cursor.index == 0 || self.buf.get(self.cursor.index - 1) == Some('\n') {
             return;
         }
 
@@ -140,18 +135,33 @@ impl Buffer {
     }
 
     pub fn move_down(&mut self) {
-        if let Some(line) = self.buf.line_at(self.cursor.row() + 1) {
-            self.cursor.down(line.len());
+        if let Some(index) = self.buf.find_next(self.cursor.index, '\n') {
+            // Note this *can* put the cursor one char after the buffer end and that's fine.
+            let line_start = index + 1;
+            let line_len = if line_start == self.buf.len() {
+                0
+            } else {
+                self.buf.line_length(line_start)
+            };
+            self.cursor.move_line(line_start, line_len);
         }
     }
 
     pub fn move_up(&mut self) {
-        if self.cursor.row() == 0 {
+        if self.cursor.index == 0 {
             return;
         }
 
-        if let Some(line) = self.buf.line_at(self.cursor.row() - 1) {
-            self.cursor.up(line.len());
+        let Some(curr_line_start) = self.buf.find_prev(self.cursor.index - 1, '\n') else {
+            return;
+        };
+
+        if let Some(prev_line_start) = self.buf.find_prev(curr_line_start - 1, '\n') {
+            let prev_line_start = prev_line_start + 1;
+            let line_len = curr_line_start.saturating_sub(prev_line_start + 1);
+            self.cursor.move_line(prev_line_start, line_len);
+        } else {
+            self.cursor.move_line(0, self.buf.line_length(0));
         }
     }
 }

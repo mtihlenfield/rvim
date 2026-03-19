@@ -1,21 +1,26 @@
 use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
-use log::warn;
+use log::{info, warn};
 use std::io::{Stdout, Write, stdout};
 
 use crate::position::Position;
 use crate::state;
 
 struct BufferView {
-    anchor: Position,
+    anchor: usize,
     cursor: Position,
 }
 
 impl BufferView {
     pub fn new() -> BufferView {
         BufferView {
-            anchor: Position::new(),
+            anchor: 0,
             cursor: Position::new(),
         }
+    }
+
+    fn set_cursor(&mut self, row: u16, col: u16) {
+        self.cursor.row = row as usize;
+        self.cursor.col = col as usize;
     }
 
     fn update_anchor(&mut self, screen_buf: &ScreenBuf, buffer: &state::Buffer) {
@@ -23,50 +28,51 @@ impl BufferView {
         // screen buff? To handle this, we probably need ot actually use the cols part of the
         // anchor to track which part of the line we are at. Should basically always be 0 except in
         // this one case.
-        let global_cursor_row = buffer.cursor.row();
-        let cols = screen_buf.cols;
-        let rows = screen_buf.rows;
+        // let global_cursor_row = buffer.cursor.row();
+        // let cols = screen_buf.cols;
+        // let rows = screen_buf.rows;
+        // TODO: make sure to account for the fact that we preserve the last row
 
-        // Check if cursor is above the anchor
-        if global_cursor_row <= self.anchor.row {
-            self.anchor.row = global_cursor_row;
-            return;
-        }
+        // // Check if cursor is above the anchor
+        // if global_cursor_row <= self.anchor.row {
+        //     self.anchor.row = global_cursor_row;
+        //     return;
+        // }
 
-        // Count the number of screen lines between the anchor and the cursor.
-        let screen_lines_to_cursor: usize = buffer
-            .lines_at(self.anchor.row)
-            .expect(&format!("Buffer has no line {}", self.anchor.row))
-            .take(global_cursor_row - self.anchor.row + 1)
-            .map(|line| line.len().div_ceil(cols as usize))
-            .sum();
+        // // Count the number of screen lines between the anchor and the cursor.
+        // let screen_lines_to_cursor: usize = buffer
+        //     .lines_at(self.anchor.row)
+        //     .expect(&format!("Buffer has no line {}", self.anchor.row))
+        //     .take(global_cursor_row - self.anchor.row + 1)
+        //     .map(|line| line.len().div_ceil(cols as usize))
+        //     .sum();
 
-        if screen_lines_to_cursor <= rows as usize {
-            // Cursor is within the visible window, nothing to do
-            return;
-        }
+        // if screen_lines_to_cursor <= rows as usize {
+        //     // Cursor is within the visible window, nothing to do
+        //     return;
+        // }
 
-        let mut screen_line_count = 0;
-        let mut line_count = 0;
-        let mut move_anchor = false;
-        let iter = buffer
-            .lines_at_rev(global_cursor_row)
-            .expect("Buffer has no line {global_cursor_row}");
-        for line in iter {
-            screen_line_count += line.len().div_ceil(screen_buf.cols as usize);
-            if screen_line_count > screen_buf.rows as usize {
-                move_anchor = true;
-                break;
-            }
+        // let mut screen_line_count = 0;
+        // let mut line_count = 0;
+        // let mut move_anchor = false;
+        // let iter = buffer
+        //     .lines_at_rev(global_cursor_row)
+        //     .expect("Buffer has no line {global_cursor_row}");
+        // for line in iter {
+        //     screen_line_count += line.len().div_ceil(screen_buf.cols as usize);
+        //     if screen_line_count > screen_buf.rows as usize {
+        //         move_anchor = true;
+        //         break;
+        //     }
 
-            line_count += 1;
-        }
+        //     line_count += 1;
+        // }
 
-        if !move_anchor {
-            return;
-        }
+        // if !move_anchor {
+        //     return;
+        // }
 
-        self.anchor.row = global_cursor_row - line_count;
+        // self.anchor.row = global_cursor_row - line_count;
     }
 
     pub fn update(
@@ -75,56 +81,65 @@ impl BufferView {
         buffer_state: &state::Buffer,
     ) -> std::io::Result<()> {
         let max_col = screen_buf.cols - 1;
-        let max_row = screen_buf.rows - 1;
+        // preserve the last row for the status line
+        let max_row = screen_buf.rows - 2;
         self.update_anchor(screen_buf, &buffer_state);
 
-        // For now we will set the cursor match the global cursor, but we may have to update
-        // it if the line is long enough to wrap around
-        self.cursor.col = buffer_state.cursor.col();
-        // We've moved the anchor at this point, so it's safe to assume that the cursor
-        // row is greater than the anchor row
-        self.cursor.row = buffer_state.cursor.row() - self.anchor.row;
+        if buffer_state.is_empty() {
+            self.fill_empty_lines(screen_buf, 0);
+            return Ok(());
+        }
+
+        // Note that were assuming that because we've updated the anchor already, the buffer cursor must
+        // be >= the anchor
+        let cursor_offset = buffer_state.cursor.index - self.anchor;
 
         let mut row: u16 = 0;
         let mut col: u16 = 0;
-        let iter = buffer_state
-            .lines_at(self.anchor.row)
-            .expect(&format!("Buffer has no line {}", self.anchor.row));
-        // TODO: right now this is an log(n) search through the buffer - way too inefficient
-        for line in iter {
+        for (offset, ch) in buffer_state.chars_at(self.anchor).enumerate() {
             // preserve the last row for the status line
-            if row > max_row - 1 {
-                break;
-            }
-
-            for ch in line.chars() {
-                if col > max_col {
-                    row += 1;
-                    col = 0;
-                }
-
-                screen_buf.write(row, col, ch);
-                col += 1;
-            }
-
-            row += 1;
-            col = 0;
-
             if row > max_row {
                 break;
             }
+
+            if ch == '\n' {
+                col = 0;
+                if offset == cursor_offset {
+                    self.set_cursor(row, col);
+                }
+                row += 1;
+                continue;
+            }
+
+            if col >= max_col {
+                if row == max_row {
+                    // We can't display the whole line, so we won't display an of it.
+                    // vim puts 3 `@` symbols on the line. Might be good to do that
+                    screen_buf.clear_row(row);
+                    break;
+                }
+
+                row += 1;
+                col = 0;
+            }
+
+            if offset == cursor_offset {
+                self.set_cursor(row, col);
+            }
+
+            screen_buf.write(row, col, ch);
+            col += 1;
         }
 
-        // TODO: update the cursor. Where we place it depends on partially on:
-        // a) the mode
-        // b) what line wraparounds happened. We probably need to track wraparounds that
-        // occurred on a line <= the cursor row. Right now wraparounds are not handled at all.
-
-        for empty_row in row..screen_buf.rows - 1 {
-            screen_buf.write(empty_row, 0, '~');
-        }
+        self.fill_empty_lines(screen_buf, row);
 
         Ok(())
+    }
+
+    pub fn fill_empty_lines(&self, screen_buf: &mut ScreenBuf, start_row: u16) {
+        for empty_row in start_row..screen_buf.rows - 1 {
+            screen_buf.write(empty_row, 0, '~');
+        }
     }
 }
 
@@ -175,6 +190,12 @@ impl ScreenBuf {
             for c in row {
                 *c = ' ';
             }
+        }
+    }
+
+    pub fn clear_row(&mut self, row: u16) {
+        for c in &mut self.back[row as usize] {
+            *c = ' '
         }
     }
 

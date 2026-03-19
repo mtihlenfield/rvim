@@ -255,7 +255,7 @@ impl GapBuffer {
         .rev()
     }
 
-    fn line_length(&self, start_index: usize) -> usize {
+    pub fn line_length(&self, start_index: usize) -> usize {
         (start_index..)
             .map(|i| self.buffer.get(i))
             .take_while(|ch| matches!(ch, Some(c) if **c != '\n'))
@@ -300,21 +300,21 @@ impl GapBuffer {
         )
     }
 
-    // /// Moving backwards from 'start', find the first instance of 'search_char'
-    // /// and return it's index. The search range is inclusive: if the search_char is
-    // /// found at 'start', start will be returned. Panics if 'start' is past the
-    // /// end of the buffer.
-    // pub fn find_prev(&self, start: usize, search_char: char) -> Option<usize> {
-    //     for (index, c) in self.chars_at_rev(start).enumerate() {
-    //         if c != search_char {
-    //             continue;
-    //         }
+    /// Moving backwards from 'start', find the first instance of 'search_char'
+    /// and return it's index. The search range is inclusive: if the search_char is
+    /// found at 'start', start will be returned. Panics if 'start' is past the
+    /// end of the buffer.
+    pub fn find_prev(&self, start: usize, search_char: char) -> Option<usize> {
+        for (index, c) in self.chars_at_rev(start).enumerate() {
+            if c != search_char {
+                continue;
+            }
 
-    //         return Some(start - index);
-    //     }
+            return Some(start - index);
+        }
 
-    //     None
-    // }
+        None
+    }
 
     /// Moving forwards from 'start', find the first instance of 'search_char'
     /// and return it's index. The search range is inclusive: if the search_char is
@@ -1002,39 +1002,39 @@ mod tests {
         assert_eq!(buf.find_next(4, 'x'), None);
     }
 
-    // #[test]
-    // #[should_panic]
-    // fn test_find_prev_empty_buffer() {
-    //     let buf = GapBuffer::new();
-    //     assert_eq!(buf.find_prev(0, 'c'), None);
-    // }
+    #[test]
+    #[should_panic]
+    fn test_find_prev_empty_buffer() {
+        let buf = GapBuffer::new();
+        assert_eq!(buf.find_prev(0, 'c'), None);
+    }
 
-    // #[test]
-    // #[should_panic]
-    // fn test_find_prev_bad_index() {
-    //     let mut buf = GapBuffer::new();
-    //     buf.insert("hello");
-    //     assert_eq!(buf.find_prev(10, 'c'), None);
-    // }
+    #[test]
+    #[should_panic]
+    fn test_find_prev_bad_index() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_prev(10, 'c'), None);
+    }
 
-    // #[test]
-    // fn test_find_prev_with_match() {
-    //     let mut buf = GapBuffer::new();
-    //     buf.insert("hello");
-    //     assert_eq!(buf.find_prev(0, 'h'), Some(0));
-    //     assert_eq!(buf.find_prev(4, 'o'), Some(4));
-    //     assert_eq!(buf.find_prev(4, 'e'), Some(1));
-    //     assert_eq!(buf.find_prev(3, 'e'), Some(1));
-    //     assert_eq!(buf.find_prev(1, 'e'), Some(1));
-    // }
+    #[test]
+    fn test_find_prev_with_match() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_prev(0, 'h'), Some(0));
+        assert_eq!(buf.find_prev(4, 'o'), Some(4));
+        assert_eq!(buf.find_prev(4, 'e'), Some(1));
+        assert_eq!(buf.find_prev(3, 'e'), Some(1));
+        assert_eq!(buf.find_prev(1, 'e'), Some(1));
+    }
 
-    // #[test]
-    // fn test_find_prev_without_match() {
-    //     let mut buf = GapBuffer::new();
-    //     buf.insert("hello");
-    //     assert_eq!(buf.find_prev(0, 'x'), None);
-    //     assert_eq!(buf.find_prev(4, 'x'), None);
-    // }
+    #[test]
+    fn test_find_prev_without_match() {
+        let mut buf = GapBuffer::new();
+        buf.insert("hello");
+        assert_eq!(buf.find_prev(0, 'x'), None);
+        assert_eq!(buf.find_prev(4, 'x'), None);
+    }
 
     #[test]
     fn test_slice() {
