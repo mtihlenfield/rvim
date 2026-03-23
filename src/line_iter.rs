@@ -55,8 +55,8 @@ impl<'a> Iterator for GapBufferLines<'a> {
             return Some(slice);
         }
 
-        let slice = self.buff.slice(self.left_index..);
-        self.left_index = self.buff.len();
+        let slice = self.buff.slice(self.left_index..self.right_index);
+        self.left_index = self.right_index;
 
         Some(slice)
     }
@@ -114,8 +114,8 @@ impl<'a> DoubleEndedIterator for GapBufferLines<'a> {
             }
         }
 
-        let slice = self.buff.slice(..=self.right_index);
-        self.right_index = 0;
+        let slice = self.buff.slice(self.left_index..=self.right_index);
+        self.right_index = self.left_index;
 
         Some(slice)
     }
@@ -199,6 +199,14 @@ mod tests {
         assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "\n");
         assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
         assert!(lines_iter.next().is_none());
+
+        let mut buf = gap_buf::GapBuffer::new();
+        buf.insert("\n\n");
+        let mut lines_iter = buf.lines_at_char(0);
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "\n");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "\n");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert!(lines_iter.next().is_none());
     }
 
     #[test]
@@ -214,6 +222,14 @@ mod tests {
             lines_iter.next().unwrap().chars().collect::<String>(),
             "hello\n"
         );
+        assert!(lines_iter.next().is_none());
+
+        let mut buf = gap_buf::GapBuffer::new();
+        buf.insert("\n\n");
+        let mut lines_iter = buf.lines_at_char_rev(buf.len() - 1);
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "\n");
+        assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "\n");
         assert!(lines_iter.next().is_none());
     }
 
@@ -299,7 +315,7 @@ mod tests {
     fn test_line_iter_single_char() {
         let mut buf = gap_buf::GapBuffer::new();
         buf.insert("a");
-        let mut lines_iter = buf.lines_at_char(buf.len());
+        let mut lines_iter = buf.lines_at_char(0);
         assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "a");
         assert!(lines_iter.next().is_none());
     }
@@ -308,7 +324,7 @@ mod tests {
     fn test_line_iter_single_char_rev() {
         let mut buf = gap_buf::GapBuffer::new();
         buf.insert("a");
-        let mut lines_iter = buf.lines_at_char_rev(buf.len() - 1);
+        let mut lines_iter = buf.lines_at_char_rev(0);
         assert_eq!(lines_iter.next().unwrap().chars().collect::<String>(), "a");
         assert!(lines_iter.next().is_none());
     }
