@@ -1,5 +1,8 @@
+use crate::char_iter;
 use crate::gap_buf;
-use crate::position::Position;
+use crate::line_iter;
+use crate::slice;
+
 use crossterm::event;
 use log::info;
 use std::iter::Rev;
@@ -7,7 +10,6 @@ use std::iter::Rev;
 pub enum Mode {
     Normal,
     Insert,
-    CommandLine,
 }
 
 #[derive(Debug, Clone)]
@@ -47,8 +49,9 @@ impl Cursor {
     }
 }
 
-// pub type BufferLines<'a> = gap_buf::GapBufferLines<'a>;
-pub type BufferChars<'a> = gap_buf::GapBufferChars<'a>;
+pub type BufferLines<'a> = line_iter::GapBufferLines<'a>;
+pub type BufferChars<'a> = char_iter::GapBufferChars<'a>;
+pub type BufferSlice<'a> = slice::GapBufferSlice<'a>;
 
 #[derive(Debug)]
 pub struct BufferError(String);
@@ -80,6 +83,10 @@ impl Buffer {
         self.buf.is_empty()
     }
 
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+
     pub fn insert(&mut self, c: char) {
         self.buf.insert(&c.to_string());
 
@@ -105,13 +112,42 @@ impl Buffer {
         self.buf.chars_at(index)
     }
 
+    pub fn chars_at_rev(&'_ self, index: usize) -> Rev<BufferChars<'_>> {
+        self.buf.chars_at_rev(index)
+    }
+
+    pub fn line_start(&self, index: usize) -> usize {
+        self.buf.line_start(index)
+    }
+
+    pub fn line_end(&self, index: usize) -> usize {
+        self.buf.line_end(index)
+    }
+
+    pub fn line_length(&self, start_index: usize) -> usize {
+        self.buf.line_length(start_index)
+    }
+
     // pub fn lines_at(&'_ self, line_num: usize) -> Option<BufferLines<'_>> {
     //     self.buf.lines_at(line_num)
     // }
 
+    // pub fn lines_at_char(&'_ self, index: usize) -> BufferLines<'_> {
+    //     self.buf.lines_at_char(index)
+    // }
+
+    pub fn lines_at_char_rev(&'_ self, index: usize) -> Rev<BufferLines<'_>> {
+        self.buf.lines_at_char_rev(index)
+    }
+
     // pub fn lines_at_rev(&'_ self, line_num: usize) -> Option<Rev<BufferLines<'_>>> {
     //     self.buf.lines_at_rev(line_num)
     // }
+    //
+
+    pub fn find_next(&'_ self, start: usize, search_char: char) -> Option<usize> {
+        self.buf.find_next(start, search_char)
+    }
 
     pub fn move_right(&mut self) {
         if self.buf.get(self.cursor.index) == Some('\n') {
@@ -249,7 +285,6 @@ impl EditorState {
         match self.mode {
             Mode::Normal => self.handle_normal_update(key_ev),
             Mode::Insert => self.handle_insert_update(key_ev),
-            Mode::CommandLine => false,
         }
     }
 }

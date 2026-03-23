@@ -4,9 +4,12 @@ use log::{error, info};
 use log4rs;
 use std::env;
 
+mod char_iter;
 mod gap_buf;
+mod line_iter;
 mod position;
 mod screen;
+mod slice;
 mod state;
 
 fn main() {
@@ -45,8 +48,10 @@ fn main() {
                 }
             }
             event::Event::Resize(cols, rows) => {
-                // TODO: resizing not working correctly - leaving behind artifacts
-                screen.resize(cols, rows);
+                if let Err(err) = screen.resize(rows, cols) {
+                    error!("Got error while resizing screen: {err}");
+                }
+
                 if let Err(err) = screen.update(&state) {
                     error!("Got error while updating screen: {err}");
                 }

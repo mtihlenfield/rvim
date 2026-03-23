@@ -5,6 +5,12 @@ use std::io::{Stdout, Write, stdout};
 use crate::position::Position;
 use crate::state;
 
+fn screen_line_count(line: &state::BufferSlice, max_col: u16) -> usize {
+    let str_line: String = line.chars().collect();
+    let stripped = str_line.replace('\n', "");
+    stripped.len().div_ceil(max_col.into()).max(1)
+}
+
 struct BufferView {
     anchor: usize,
     cursor: Position,
@@ -23,56 +29,58 @@ impl BufferView {
         self.cursor.col = col as usize;
     }
 
-    fn update_anchor(&mut self, screen_buf: &ScreenBuf, buffer: &state::Buffer) {
-        // TODO: what about a case where the file is one long line that is larger than the
-        // screen buff? To handle this, we probably need ot actually use the cols part of the
-        // anchor to track which part of the line we are at. Should basically always be 0 except in
-        // this one case.
-        // let global_cursor_row = buffer.cursor.row();
-        // let cols = screen_buf.cols;
-        // let rows = screen_buf.rows;
-        // TODO: make sure to account for the fact that we preserve the last row
+    fn update_anchor(&mut self, buffer: &state::Buffer, max_row: u16, max_col: u16) {
+        // TODO: this is not handling the case where the file is one big line that fills
+        // more than one screen.
+        let global_cursor = buffer.cursor.index;
+        // If the cursor is above the anchor, search for the start of the cursor line and
+        // put the anchor there.
+        if global_cursor <= self.anchor {
+            self.anchor = buffer.line_start(global_cursor);
+            return;
+        }
 
-        // // Check if cursor is above the anchor
-        // if global_cursor_row <= self.anchor.row {
-        //     self.anchor.row = global_cursor_row;
-        //     return;
-        // }
+        let max_chars = global_cursor - buffer.line_start(self.anchor);
 
-        // // Count the number of screen lines between the anchor and the cursor.
-        // let screen_lines_to_cursor: usize = buffer
-        //     .lines_at(self.anchor.row)
-        //     .expect(&format!("Buffer has no line {}", self.anchor.row))
-        //     .take(global_cursor_row - self.anchor.row + 1)
-        //     .map(|line| line.len().div_ceil(cols as usize))
-        //     .sum();
+        let mut row = 0;
+        let mut col = 0;
+        for ch in buffer.chars_at(self.anchor).take(max_chars) {
+            if ch == '\n' {
+                col = 0;
+                row += 1;
+                continue;
+            }
 
-        // if screen_lines_to_cursor <= rows as usize {
-        //     // Cursor is within the visible window, nothing to do
-        //     return;
-        // }
+            if col >= max_col {
+                row += 1;
+                col = 0;
+            }
 
-        // let mut screen_line_count = 0;
-        // let mut line_count = 0;
-        // let mut move_anchor = false;
-        // let iter = buffer
-        //     .lines_at_rev(global_cursor_row)
-        //     .expect("Buffer has no line {global_cursor_row}");
-        // for line in iter {
-        //     screen_line_count += line.len().div_ceil(screen_buf.cols as usize);
-        //     if screen_line_count > screen_buf.rows as usize {
-        //         move_anchor = true;
-        //         break;
-        //     }
+            col += 1;
+        }
 
-        //     line_count += 1;
-        // }
+        if row <= max_row {
+            return;
+        }
 
-        // if !move_anchor {
-        //     return;
-        // }
+        // if it is not in the current window, we walk backwards from the *end* of the line that the
+        // cursor is on until the screen buff is filled
+        let cursor_line_end = buffer.line_end(global_cursor);
+        let mut offset = 0;
+        let mut total_screen_lines = 0;
+        for line in buffer.lines_at_char_rev(cursor_line_end) {
+            let screen_lines = screen_line_count(&line, max_col);
 
-        // self.anchor.row = global_cursor_row - line_count;
+            if total_screen_lines + screen_lines >= max_row.into() {
+                break;
+            }
+
+            offset += line.len();
+            total_screen_lines += screen_lines;
+        }
+
+        // TODO: we seem to be jumping one line too many when jumping down.
+        self.anchor = buffer.line_start(cursor_line_end - offset);
     }
 
     pub fn update(
@@ -83,7 +91,7 @@ impl BufferView {
         let max_col = screen_buf.cols - 1;
         // preserve the last row for the status line
         let max_row = screen_buf.rows - 2;
-        self.update_anchor(screen_buf, &buffer_state);
+        self.update_anchor(&buffer_state, max_row, max_col);
 
         if buffer_state.is_empty() {
             self.fill_empty_lines(screen_buf, 0);
@@ -155,16 +163,16 @@ impl StatusView {
         screen_buf: &mut ScreenBuf,
         new_state: &state::EditorState,
     ) -> std::io::Result<()> {
-        match new_state.mode {
-            state::Mode::Insert => {
-                for (i, c) in "-- INSERT --".chars().enumerate() {
-                    screen_buf.write(screen_buf.rows - 1, i as u16, c);
-                }
+        let mode_str = match new_state.mode {
+            state::Mode::Insert => "-- INSERT --",
+            state::Mode::Normal => "-- NORMAL --",
+        };
 
-                Ok(())
-            }
-            _ => Ok(()),
+        for (i, c) in mode_str.chars().enumerate() {
+            screen_buf.write(screen_buf.rows - 1, i as u16, c);
         }
+
+        Ok(())
     }
 }
 
@@ -237,8 +245,14 @@ impl Screen {
         }
     }
 
-    pub fn resize(&mut self, width: u16, height: u16) {
-        self.screen_buf = ScreenBuf::new(width, height);
+    pub fn resize(&mut self, rows: u16, cols: u16) -> std::io::Result<()> {
+        self.screen_buf = ScreenBuf::new(rows, cols);
+        self.buffer_view = BufferView::new();
+        self.status_view = StatusView::new();
+
+        let mut out = stdout();
+        out.execute(terminal::Clear(terminal::ClearType::All))?;
+        Ok(())
     }
 
     pub fn update(&mut self, new_state: &state::EditorState) -> std::io::Result<()> {
