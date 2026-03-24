@@ -33,6 +33,7 @@ impl BufferView {
         // TODO: this is not handling the case where the file is one big line that fills
         // more than one screen.
         if buffer.len() == 0 {
+            self.anchor = 0;
             return;
         }
 
@@ -100,14 +101,21 @@ impl BufferView {
         let max_row = screen_buf.rows - 2;
         self.scroll_in_to_view(&buffer_state, max_row, max_col);
 
+        info!(
+            "cursor: {}, anchor: {}",
+            buffer_state.cursor.index, self.anchor
+        );
+
         if buffer_state.is_empty() {
-            self.fill_empty_lines(screen_buf, 0);
+            self.set_cursor(0, 0);
+            self.fill_empty_lines(screen_buf, 1);
             return Ok(());
         }
 
         // Note that were assuming that because we've updated the anchor already, the buffer cursor must
         // be >= the anchor
         let cursor_offset = buffer_state.cursor.index - self.anchor;
+        let mut cursor_set = false;
 
         let mut row: u16 = 0;
         let mut col: u16 = 0;
@@ -120,6 +128,7 @@ impl BufferView {
             if ch == '\n' {
                 col = 0;
                 if offset == cursor_offset {
+                    cursor_set = true;
                     self.set_cursor(row, col);
                 }
                 row += 1;
@@ -139,14 +148,21 @@ impl BufferView {
             }
 
             if offset == cursor_offset {
+                cursor_set = true;
                 self.set_cursor(row, col);
             }
 
+            info!("writing to row: {row}, col: {col}");
             screen_buf.write(row, col, ch);
             col += 1;
         }
 
-        self.fill_empty_lines(screen_buf, row);
+        if !cursor_set {
+            // The cursor is at the end of the buffer - happens in insert mode.
+            self.set_cursor(row, col);
+        }
+
+        self.fill_empty_lines(screen_buf, row + 1);
 
         Ok(())
     }

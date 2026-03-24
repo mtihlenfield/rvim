@@ -88,19 +88,16 @@ impl Buffer {
     }
 
     pub fn insert(&mut self, c: char) {
-        self.buf.insert(&c.to_string());
-
-        // if c == '\n' {
-        //     self.cursor.newline();
-        // } else {
-        //     self.cursor.right();
-        // }
+        self.buf
+            .insert_at(&c.to_string(), self.cursor.index)
+            .expect("Failed to insert char");
+        self.cursor.right();
     }
 
     pub fn delete(&mut self) -> Result<(), BufferError> {
-        match self.buf.delete() {
+        match self.buf.delete_at(self.cursor.index) {
             Ok(()) => {
-                //  TODO: move the cursor
+                self.cursor.left();
                 Ok(())
             }
             Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),

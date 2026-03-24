@@ -158,6 +158,13 @@ impl GapBuffer {
         Ok(())
     }
 
+    pub fn delete_at(&mut self, pos: usize) -> Result<(), GapBufferError> {
+        self.move_cursor(pos)?;
+        self.delete()?;
+
+        Ok(())
+    }
+
     /// Translates an index in to the GapBuffer in to index into
     /// the "real" inner buffer. Does not do bounds checking on the input
     /// index, so it may return a "real" index that is outside the bounds
