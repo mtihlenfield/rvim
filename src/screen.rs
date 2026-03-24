@@ -32,6 +32,10 @@ impl BufferView {
     fn scroll_in_to_view(&mut self, buffer: &state::Buffer, max_row: u16, max_col: u16) {
         // TODO: this is not handling the case where the file is one big line that fills
         // more than one screen.
+        if buffer.len() == 0 {
+            return;
+        }
+
         let global_cursor = buffer.cursor.index;
         // If the cursor is above the anchor, search for the start of the cursor line and
         // put the anchor there.
@@ -63,17 +67,15 @@ impl BufferView {
             return;
         }
 
-        // if it is not in the current window, we walk backwards from the *end* of the line that the
-        // cursor is on until the screen buff is filled
-        // TODO: right now the cursor can be one char past the end of the buffer, which will cause
-        // this line_end call to fail
         let cursor_line_end = buffer.line_end(global_cursor);
+
         let mut offset = 0;
         let mut total_screen_lines = 0;
+        // if it is not in the current window, we walk backwards from the *end* of the line that the
+        // cursor is on until the screen buff is filled
         for line in buffer.lines_at_char_rev(cursor_line_end) {
             let screen_lines = screen_line_count(&line, max_col);
 
-            // TODO: I don't yet know why this +1 is necessary
             if total_screen_lines + screen_lines > (max_row + 1).into() {
                 break;
             }
@@ -82,7 +84,9 @@ impl BufferView {
             total_screen_lines += screen_lines;
         }
 
-        // TODO: this goes one line past the end of the buffer
+        // TODO: it looks like this goes one past the end of the buffer, but it doesn't: all my
+        // files just have trailing newlines. But traditionally editors don't show that trailing
+        // newline, so I should figure out how to get rid of it.
         self.anchor = offset;
     }
 

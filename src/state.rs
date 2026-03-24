@@ -176,14 +176,13 @@ impl Buffer {
 
     pub fn move_down(&mut self) {
         if let Some(index) = self.buf.find_next(self.cursor.index, '\n') {
-            // Note this *can* put the cursor one char after the buffer end and that's fine.
-            let line_start = index + 1;
-            let line_len = if line_start == self.buf.len() {
-                0
-            } else {
-                self.buf.line_length(line_start)
-            };
-            self.cursor.move_line(line_start, line_len);
+            if index == self.buf.len() - 1 {
+                // Trailing newline
+                return;
+            }
+
+            let line_len = self.buf.line_length(index + 1);
+            self.cursor.move_line(index + 1, line_len);
         }
     }
 
