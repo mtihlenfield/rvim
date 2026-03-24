@@ -29,7 +29,7 @@ impl BufferView {
         self.cursor.col = col as usize;
     }
 
-    fn update_anchor(&mut self, buffer: &state::Buffer, max_row: u16, max_col: u16) {
+    fn scroll_in_to_view(&mut self, buffer: &state::Buffer, max_row: u16, max_col: u16) {
         // TODO: this is not handling the case where the file is one big line that fills
         // more than one screen.
         let global_cursor = buffer.cursor.index;
@@ -65,22 +65,25 @@ impl BufferView {
 
         // if it is not in the current window, we walk backwards from the *end* of the line that the
         // cursor is on until the screen buff is filled
+        // TODO: right now the cursor can be one char past the end of the buffer, which will cause
+        // this line_end call to fail
         let cursor_line_end = buffer.line_end(global_cursor);
         let mut offset = 0;
         let mut total_screen_lines = 0;
         for line in buffer.lines_at_char_rev(cursor_line_end) {
             let screen_lines = screen_line_count(&line, max_col);
 
-            if total_screen_lines + screen_lines >= max_row.into() {
+            // TODO: I don't yet know why this +1 is necessary
+            if total_screen_lines + screen_lines > (max_row + 1).into() {
                 break;
             }
 
-            offset += line.len();
+            offset = line.start();
             total_screen_lines += screen_lines;
         }
 
-        // TODO: we seem to be jumping one line too many when jumping down.
-        self.anchor = buffer.line_start(cursor_line_end - offset);
+        // TODO: this goes one line past the end of the buffer
+        self.anchor = offset;
     }
 
     pub fn update(
@@ -91,7 +94,7 @@ impl BufferView {
         let max_col = screen_buf.cols - 1;
         // preserve the last row for the status line
         let max_row = screen_buf.rows - 2;
-        self.update_anchor(&buffer_state, max_row, max_col);
+        self.scroll_in_to_view(&buffer_state, max_row, max_col);
 
         if buffer_state.is_empty() {
             self.fill_empty_lines(screen_buf, 0);

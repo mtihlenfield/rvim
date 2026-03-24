@@ -32,6 +32,10 @@ impl<'a> GapBufferSlice<'a> {
         }
     }
 
+    pub fn start(&self) -> usize {
+        self.start_index
+    }
+
     pub fn chars(&self) -> char_iter::GapBufferChars<'a> {
         char_iter::GapBufferChars::new(self.clone(), 0, self.len())
     }

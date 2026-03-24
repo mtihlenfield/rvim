@@ -108,6 +108,10 @@ impl Buffer {
         }
     }
 
+    pub fn get(&self, index: usize) -> Option<char> {
+        self.buf.get(index)
+    }
+
     pub fn chars_at(&'_ self, index: usize) -> BufferChars<'_> {
         self.buf.chars_at(index)
     }
