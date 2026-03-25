@@ -4,6 +4,7 @@ use log::{error, info};
 use log4rs;
 use std::env;
 
+mod buffer;
 mod char_iter;
 mod gap_buf;
 mod line_iter;

@@ -1,4 +1,3 @@
-use log::info;
 use std::iter::Rev;
 use std::ops::{Bound, RangeBounds};
 
@@ -309,9 +308,9 @@ impl GapBuffer {
     //     })
     // }
 
-    pub fn lines_at_char(&self, index: usize) -> line_iter::GapBufferLines<'_> {
-        line_iter::GapBufferLines::new(self.slice(..), 0, self.len())
-    }
+    // pub fn lines_at_char(&self, index: usize) -> line_iter::GapBufferLines<'_> {
+    //     line_iter::GapBufferLines::new(self.slice(..), 0, self.len())
+    // }
 
     pub fn lines_at_char_rev(&self, index: usize) -> Rev<line_iter::GapBufferLines<'_>> {
         line_iter::GapBufferLines::new(self.slice(..), 0, index).rev()

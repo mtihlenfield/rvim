@@ -2,10 +2,11 @@ use crossterm::{ExecutableCommand, QueueableCommand, cursor, style, terminal};
 use log::{info, warn};
 use std::io::{Stdout, Write, stdout};
 
+use crate::buffer;
 use crate::position::Position;
 use crate::state;
 
-fn screen_line_count(line: &state::BufferSlice, max_col: u16) -> usize {
+fn screen_line_count(line: &buffer::BufferSlice, max_col: u16) -> usize {
     let str_line: String = line.chars().collect();
     let stripped = str_line.replace('\n', "");
     stripped.len().div_ceil(max_col.into()).max(1)
@@ -29,7 +30,7 @@ impl BufferView {
         self.cursor.col = col as usize;
     }
 
-    fn scroll_in_to_view(&mut self, buffer: &state::Buffer, max_row: u16, max_col: u16) {
+    fn scroll_in_to_view(&mut self, buffer: &buffer::Buffer, max_row: u16, max_col: u16) {
         // TODO: this is not handling the case where the file is one big line that fills
         // more than one screen.
         if buffer.len() == 0 {
@@ -68,7 +69,12 @@ impl BufferView {
             return;
         }
 
-        let cursor_line_end = buffer.line_end(global_cursor);
+        let cursor_line_end = if global_cursor == buffer.len() {
+            // When in insert mode, the cursor can be one char past the buffer
+            global_cursor - 1
+        } else {
+            buffer.line_end(global_cursor)
+        };
 
         let mut offset = 0;
         let mut total_screen_lines = 0;
@@ -94,17 +100,12 @@ impl BufferView {
     pub fn update(
         &mut self,
         screen_buf: &mut ScreenBuf,
-        buffer_state: &state::Buffer,
+        buffer_state: &buffer::Buffer,
     ) -> std::io::Result<()> {
         let max_col = screen_buf.cols - 1;
         // preserve the last row for the status line
         let max_row = screen_buf.rows - 2;
         self.scroll_in_to_view(&buffer_state, max_row, max_col);
-
-        info!(
-            "cursor: {}, anchor: {}",
-            buffer_state.cursor.index, self.anchor
-        );
 
         if buffer_state.is_empty() {
             self.set_cursor(0, 0);
@@ -152,7 +153,6 @@ impl BufferView {
                 self.set_cursor(row, col);
             }
 
-            info!("writing to row: {row}, col: {col}");
             screen_buf.write(row, col, ch);
             col += 1;
         }
