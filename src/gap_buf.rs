@@ -259,11 +259,20 @@ impl GapBuffer {
         char_iter::GapBufferChars::new(self.slice(..), 0, index + 1).rev()
     }
 
+    /// NOTE: Returns the line length *with the \n* if it's there.
     pub fn line_length(&self, start_index: usize) -> usize {
-        (start_index..)
-            .map(|i| self.buffer.get(i))
-            .take_while(|ch| matches!(ch, Some(c) if **c != '\n'))
-            .count()
+        let mut len = 0;
+
+        for i in start_index.. {
+            match self.buffer.get(i) {
+                Some('\n') => return len + 1,
+                Some(_) => len += 1,
+                None => return len,
+            }
+        }
+
+        // unreachable, but rust requires it
+        len
     }
 
     /// Given an index in to the buffer, returns the index of the first char of the line that index

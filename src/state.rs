@@ -80,11 +80,8 @@ impl EditorState {
                 }
             }
             event::KeyCode::Esc => {
-                // TODO: in vim this also results in a cursor change - it moves one char to the
-                // left if it's at the end of a line (of text, not a row). Which means that if
-                // you go straight back to insert mode you start one char to the left of where you
-                // were before switching to normal mode.
                 self.mode = Mode::Normal;
+                self.buffer.move_left();
                 info!("Switching to Normal mode.");
             }
             _ => {}
