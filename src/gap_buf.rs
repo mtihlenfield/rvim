@@ -264,7 +264,7 @@ impl GapBuffer {
         let mut len = 0;
 
         for i in start_index.. {
-            match self.buffer.get(i) {
+            match self.get(i) {
                 Some('\n') => return len + 1,
                 Some(_) => len += 1,
                 None => return len,

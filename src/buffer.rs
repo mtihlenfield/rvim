@@ -31,6 +31,7 @@ impl Cursor {
     /// NOTE: line_len should not include the \n char
     fn adjust_col(&self, line_len: usize) -> usize {
         if self.preffered_col >= line_len {
+            // -1 because this is a length, not an index
             line_len.saturating_sub(1)
         } else {
             self.preffered_col
@@ -223,9 +224,24 @@ impl Buffer {
                 return;
             }
 
-            // TODO: move_line expects that line_len does not include the newline char
-            let line_len = self.buf.line_length(index + 1);
-            self.cursor.move_line(index + 1, line_len);
+            let line_start = index + 1;
+
+            // We need to find the line length of the next line, but we need to account
+            // for the fact that line_start could:
+            // - point to the start of a normal line that ends in a \n
+            // - point to a \n, indicating that the next line is empty
+            // - point to the last line in the file, which does not end in a \n
+            let mut line_len = self.buf.line_length(line_start);
+            // note that we know line_len can't be 0. The only way that is possible is if
+            // index points to a trailing newline at the end of the file, and we've already
+            // returned if that was the case.
+            line_len = if self.buf.get(line_start + line_len - 1) == Some('\n') {
+                line_len - 1
+            } else {
+                line_len
+            };
+
+            self.cursor.move_line(line_start, line_len);
         }
     }
 
@@ -242,6 +258,7 @@ impl Buffer {
             // index being 0 here
             Some(e) if e == self.cursor.index => self.cursor.index - 1,
             Some(e) => e,
+            // There is no newline before the cursor, which means we are on the very first line:w
             None => return,
         };
 
@@ -292,6 +309,8 @@ mod tests {
         buff.move_right(true);
         assert_eq!(buff.cursor.index, 0);
     }
+
+    // --- move up tests ---
 
     #[test]
     fn test_move_up_one_line() {
@@ -376,6 +395,66 @@ mod tests {
         buff.move_up();
         assert_cursor!(&buff, 0, '\n');
     }
+
+    // --- move down tests ---
+
+    #[test]
+    fn test_move_down_one_line() {
+        let mut buff = Buffer::from_string("hello");
+
+        // With cursor at first char in buffer
+        buff.move_down();
+        assert_cursor!(&buff, 0, 'h');
+
+        // With cursor at random char in line
+        buff.cursor.jump(3, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 3, 'l');
+    }
+
+    #[test]
+    fn test_move_down_two_lines() {
+        let mut buff = Buffer::from_string("goodbye\nhello");
+
+        // With cursor at first char on first line
+        buff.cursor.jump(0, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 8, 'h');
+
+        // With cursor at char in middle of the first line
+        buff.cursor.jump(3, 3);
+        buff.move_down();
+        assert_cursor!(&buff, 11, 'l');
+
+        // With cursor at last char in the first line
+        buff.cursor.jump(6, 6);
+        buff.move_down();
+        // Should end at the last char in the second line because preferred_col is longer
+        // than the line length
+        assert_cursor!(&buff, 12, 'o');
+    }
+
+    // #[test]
+    // fn test_move_down_normal() {
+    //     let mut buff = Buffer::from_string("hello\nworld\ngoodbye");
+    //     // With cursor at first char on third line
+    //     buff.cursor.jump(12, 0);
+    //     buff.move_down();
+    //     // Should end at the first char in the second line
+    //     assert_cursor!(&buff, 6, 'w');
+
+    //     // with cursor at char in middle of 3rd line
+    //     buff.cursor.jump(15, 3);
+    //     buff.move_down();
+    //     assert_cursor!(&buff, 9, 'l');
+
+    //     // With cursor at last char in third line
+    //     buff.cursor.jump(18, 6);
+    //     buff.move_down();
+    //     // Should end at the last char in the second line because preferred_col is longer
+    //     // than the line length
+    //     assert_cursor!(&buff, 10, 'd');
+    // }
 
     // TODO: tests with the cursor at one past the end of the buffer? Would only need to worry
     // about this during insert mode movements: left and right
