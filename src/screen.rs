@@ -38,7 +38,7 @@ impl BufferView {
             return;
         }
 
-        let global_cursor = buffer.cursor.index;
+        let global_cursor = buffer.cursor_index();
         // If the cursor is above the anchor, search for the start of the cursor line and
         // put the anchor there.
         if global_cursor <= self.anchor {
@@ -93,7 +93,8 @@ impl BufferView {
 
         // TODO: it looks like this goes one past the end of the buffer, but it doesn't: all my
         // files just have trailing newlines. But traditionally editors don't show that trailing
-        // newline, so I should figure out how to get rid of it.
+        // newline, so I should figure out how to get rid of it. The change may need to be in
+        // update
         self.anchor = offset;
     }
 
@@ -102,6 +103,7 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         buffer_state: &buffer::Buffer,
     ) -> std::io::Result<()> {
+        info!("Cursor: {}", buffer_state.cursor_index());
         let max_col = screen_buf.cols - 1;
         // preserve the last row for the status line
         let max_row = screen_buf.rows - 2;
@@ -115,7 +117,7 @@ impl BufferView {
 
         // Note that were assuming that because we've updated the anchor already, the buffer cursor must
         // be >= the anchor
-        let cursor_offset = buffer_state.cursor.index - self.anchor;
+        let cursor_offset = buffer_state.cursor_index() - self.anchor;
         let mut cursor_set = false;
 
         let mut row: u16 = 0;

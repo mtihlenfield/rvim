@@ -58,7 +58,7 @@ pub struct BufferError(pub String);
 
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
-    pub cursor: Cursor,
+    cursor: Cursor,
 }
 
 impl Buffer {
@@ -159,7 +159,14 @@ impl Buffer {
     //     self.buf.find_next(start, search_char)
     // }
 
+    pub fn cursor_index(&self) -> usize {
+        return self.cursor.index;
+    }
+
     pub fn move_right(&mut self, force: bool) {
+        // Some expected invariants:
+        // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor cursor *can* be == buf.len()
         if self.buf.get(self.cursor.index) == Some('\n') || self.len() == 0 {
             // cursor is on an empty line
             return;
@@ -179,7 +186,23 @@ impl Buffer {
     }
 
     pub fn move_left(&mut self) {
-        if self.cursor.index == 0 || self.buf.get(self.cursor.index - 1) == Some('\n') {
+        // Some expected invariants:
+        // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor cursor *can* be == buf.len()
+        if self.cursor.index == 0 {
+            return;
+        }
+        if self.cursor.index == self.buf.len() {
+            // We're transition from insert to normal mode and the cursor is  +1, so we have to
+            // decrease it no matter what.
+            // TODO: this still isn't working quite right - doesn't handle trailing newline
+            // correctly
+            self.cursor.left();
+        }
+
+        if self.buf.get(self.cursor.index - 1) == Some('\n') {
+            // TODO: this doesn't not handle the case where we are switching back from insert mode
+            // and the cursor == buffer.len()
             return;
         }
 
@@ -187,6 +210,9 @@ impl Buffer {
     }
 
     pub fn move_down(&mut self) {
+        // Some expected invariants:
+        // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor will never be >= buf.len()
         if self.len() == 0 || self.cursor.index == self.len() {
             return;
         }
@@ -206,6 +232,7 @@ impl Buffer {
     pub fn move_up(&mut self) {
         // Some expected invariants:
         // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor will never be >= buf.len()
         if self.cursor.index == 0 || self.len() == 0 {
             return;
         }
@@ -218,13 +245,19 @@ impl Buffer {
             None => return,
         };
 
+        if prev_line_end == 0 {
+            // We have an empty newline at index 0
+            self.cursor.move_line(0, 0);
+            return;
+        }
+
         if let Some(pre_prev_line_end) = self.buf.find_prev(prev_line_end.saturating_sub(1), '\n') {
             let target_line_start = pre_prev_line_end + 1;
             let target_line_len = prev_line_end.saturating_sub(target_line_start);
             self.cursor.move_line(target_line_start, target_line_len);
         } else {
-            // We're moving up to the first line, and we know that the line ends in a \n. Subtract
-            // 1 to get the length without the \n
+            // We're moving up to the first line, the line is not empty, and we know that the line ends in a \n.
+            // Subtract 1 to get the length without the \n
             self.cursor.move_line(0, self.buf.line_length(0) - 1);
         }
     }
@@ -335,6 +368,11 @@ mod tests {
 
         // With cursor on the empty line at the start
         buff.cursor.jump(0, 0);
+        buff.move_up();
+        assert_cursor!(&buff, 0, '\n');
+
+        let mut buff = Buffer::from_string("\n\n");
+        buff.cursor.jump(1, 0);
         buff.move_up();
         assert_cursor!(&buff, 0, '\n');
     }
