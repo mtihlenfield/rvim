@@ -81,6 +81,7 @@ impl EditorState {
             }
             event::KeyCode::Esc => {
                 self.mode = Mode::Normal;
+                // TODO: we're moving one char too far when at the end of the buffer
                 self.buffer.move_left();
                 info!("Switching to Normal mode.");
             }

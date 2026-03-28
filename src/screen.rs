@@ -129,6 +129,9 @@ impl BufferView {
             }
 
             if ch == '\n' {
+                // TODO: if we enter insert mode by hitting `a`, this could put the cursor at a \n.
+                // In that case we want the cursor one past the end of the line instead of at 0. If
+                // we do that, we also have to consider that we might need to wrap around
                 col = 0;
                 if offset == cursor_offset {
                     cursor_set = true;

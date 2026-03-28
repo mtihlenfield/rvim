@@ -164,17 +164,21 @@ impl Buffer {
         return self.cursor.index;
     }
 
-    pub fn move_right(&mut self, force: bool) {
+    pub fn move_right(&mut self, append_mode: bool) {
         // Some expected invariants:
-        // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor *can* be on a newline, because we move left/right in insert mode
         // - The cursor cursor *can* be == buf.len()
         if self.buf.get(self.cursor.index) == Some('\n') || self.len() == 0 {
             // cursor is on an empty line
             return;
         }
 
-        if force {
-            // TODO: not working on the last line empty lines
+        // Append mode is different in that:
+        // - It can put the cursor on a newline even if the line is not empty
+        // - It can put the cursor at buf.len() (an invalid index)
+        // This means that when in append mode we always move the cursor, no matter
+        // where is is at
+        if append_mode {
             self.cursor.right();
             return;
         }
@@ -188,7 +192,7 @@ impl Buffer {
 
     pub fn move_left(&mut self) {
         // Some expected invariants:
-        // - The cursor should only ever be on a \n if it is an empty line
+        // - The cursor *can* be on a newline, because we move left/right in insert mode
         // - The cursor cursor *can* be == buf.len()
         if self.cursor.index == 0 {
             return;
@@ -490,24 +494,53 @@ mod tests {
     // --- move right tests ---
     #[test]
     fn test_move_right_normal() {
-        // TODO: Cursor is on a non-newline char, and the next char is a non-newline char.
+        let mut buff = Buffer::from_string("hello");
+        buff.cursor.jump(2, 2);
+        buff.move_right(false);
+        assert_cursor!(&buff, 3, 'l');
+        assert_eq!(buff.cursor.preffered_col, 3);
     }
 
     #[test]
     fn test_move_right_end_of_line() {
-        // TODO: cursor is at the end of a line, so we shouldn't move
+        let mut buff = Buffer::from_string("hello\nworld");
+        buff.cursor.jump(4, 4);
+        buff.move_right(false);
+        assert_cursor!(&buff, 4, 'o');
+        assert_eq!(buff.cursor.preffered_col, 4);
+
+        buff.move_right(true);
+        assert_cursor!(&buff, 5, '\n');
+        assert_eq!(buff.cursor.preffered_col, 5);
     }
 
     #[test]
     fn test_move_right_empty_line() {
-        // TODO: cursor is on an empty line, so we can't move right
+        let mut buff = Buffer::from_string("hello\n\nworld");
+        buff.cursor.jump(6, 0);
+        buff.move_right(false);
+        assert_cursor!(&buff, 6, '\n');
+        assert_eq!(buff.cursor.preffered_col, 0);
+
+        // if you enter append mode on an empty line, the cursor should stay at the same spot
+        buff.move_right(true);
+        assert_cursor!(&buff, 6, '\n');
+        assert_eq!(buff.cursor.preffered_col, 0);
     }
 
     #[test]
     fn test_move_right_eof() {
-        // TODO: cursor is at the last char in the buffer, so we shouldn't move
-    }
+        let mut buff = Buffer::from_string("hello");
+        buff.cursor.jump(4, 4);
+        buff.move_right(false);
+        assert_cursor!(&buff, 4, 'o');
+        assert_eq!(buff.cursor.preffered_col, 4);
 
-    // TODO: tests with the cursor at one past the end of the buffer? Would only need to worry
-    // about this during insert mode movements: left and right
+        // if you enter append mode with the cursor at the very end of the buffer, the cursor
+        // should move one past the end (an invalid index)
+        buff.move_right(true);
+        assert_eq!(buff.cursor.index, 5);
+        assert_eq!(buff.get(buff.cursor.index), None);
+        assert_eq!(buff.cursor.preffered_col, 5);
+    }
 }
