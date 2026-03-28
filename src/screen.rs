@@ -294,11 +294,13 @@ impl Screen {
             .update(&mut self.screen_buf, &new_state.buffer)?;
         self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
-        let cursor = match new_state.mode {
-            state::Mode::Insert | state::Mode::Normal => self.buffer_view.cursor.clone(),
-            _ => Position::new(),
-        };
+        // TODO: when we have command mode, we will have to handle it something like this
+        // let cursor = match new_state.mode {
+        //     state::Mode::Insert | state::Mode::Normal => self.buffer_view.cursor.clone(),
+        //     _ => Position::new(),
+        // };
 
+        let cursor = self.buffer_view.cursor.clone();
         out.queue(cursor::MoveTo(cursor.col as u16, cursor.row as u16))?;
 
         out.flush()

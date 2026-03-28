@@ -258,12 +258,13 @@ impl Buffer {
             // index being 0 here
             Some(e) if e == self.cursor.index => self.cursor.index - 1,
             Some(e) => e,
-            // There is no newline before the cursor, which means we are on the very first line:w
+            // There is no newline before the cursor, which means we are on the very first line and
+            // can't move up
             None => return,
         };
 
         if prev_line_end == 0 {
-            // We have an empty newline at index 0
+            // The line above is the first line, and it is just a single `\n` char
             self.cursor.move_line(0, 0);
             return;
         }
@@ -434,27 +435,78 @@ mod tests {
         assert_cursor!(&buff, 12, 'o');
     }
 
-    // #[test]
-    // fn test_move_down_normal() {
-    //     let mut buff = Buffer::from_string("hello\nworld\ngoodbye");
-    //     // With cursor at first char on third line
-    //     buff.cursor.jump(12, 0);
-    //     buff.move_down();
-    //     // Should end at the first char in the second line
-    //     assert_cursor!(&buff, 6, 'w');
+    #[test]
+    fn test_move_down_normal() {
+        let mut buff = Buffer::from_string("goodbye\nhello\nworld");
+        // With cursor at first char on first line
+        buff.cursor.jump(0, 0);
+        buff.move_down();
+        // Should end at the first char in the second line
+        assert_cursor!(&buff, 8, 'h');
 
-    //     // with cursor at char in middle of 3rd line
-    //     buff.cursor.jump(15, 3);
-    //     buff.move_down();
-    //     assert_cursor!(&buff, 9, 'l');
+        // with cursor at char in middle of 3rd line
+        buff.cursor.jump(3, 3);
+        buff.move_down();
+        assert_cursor!(&buff, 11, 'l');
 
-    //     // With cursor at last char in third line
-    //     buff.cursor.jump(18, 6);
-    //     buff.move_down();
-    //     // Should end at the last char in the second line because preferred_col is longer
-    //     // than the line length
-    //     assert_cursor!(&buff, 10, 'd');
-    // }
+        // With cursor at last char in third line
+        buff.cursor.jump(6, 6);
+        buff.move_down();
+        // Should end at the last char in the second line because preferred_col is longer
+        // than the line length
+        assert_cursor!(&buff, 12, 'o');
+    }
+
+    #[test]
+    fn test_move_down_empty_line() {
+        let mut buff = Buffer::from_string("\nhello\n\nworld\n");
+
+        // With cursor on the empty line at the start
+        buff.cursor.jump(0, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 1, 'h');
+
+        // With cursor at first full line, moving to empty line
+        buff.cursor.jump(3, 2);
+        buff.move_down();
+        assert_cursor!(&buff, 7, '\n');
+
+        // With cursor on the empty line in the middle
+        buff.cursor.jump(7, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 8, 'w');
+
+        // With cursor at second to last (full) line
+        buff.cursor.jump(8, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 8, 'w');
+
+        let mut buff = Buffer::from_string("\n\n");
+        buff.cursor.jump(0, 0);
+        buff.move_down();
+        assert_cursor!(&buff, 1, '\n');
+    }
+
+    // --- move right tests ---
+    #[test]
+    fn test_move_right_normal() {
+        // TODO: Cursor is on a non-newline char, and the next char is a non-newline char.
+    }
+
+    #[test]
+    fn test_move_right_end_of_line() {
+        // TODO: cursor is at the end of a line, so we shouldn't move
+    }
+
+    #[test]
+    fn test_move_right_empty_line() {
+        // TODO: cursor is on an empty line, so we can't move right
+    }
+
+    #[test]
+    fn test_move_right_eof() {
+        // TODO: cursor is at the last char in the buffer, so we shouldn't move
+    }
 
     // TODO: tests with the cursor at one past the end of the buffer? Would only need to worry
     // about this during insert mode movements: left and right

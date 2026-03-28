@@ -209,29 +209,30 @@ impl GapBuffer {
         slice::GapBufferSlice::new(self, start_index, end_index)
     }
 
-    fn find_line(&self, line_num: usize) -> Option<usize> {
-        let mut line_count = 0;
-        let mut char_count = 0;
-        let mut chars = self.chars();
+    // fn find_line(&self, line_num: usize) -> Option<usize> {
+    //     let mut line_count = 0;
+    //     let mut char_count = 0;
+    //     let mut chars = self.chars();
 
-        while line_count < line_num {
-            match chars.next() {
-                Some('\n') => {
-                    line_count += 1;
-                    char_count += 1
-                }
-                Some(_) => char_count += 1,
-                None => break,
-            }
-        }
+    //     while line_count < line_num {
+    //         match chars.next() {
+    //             Some('\n') => {
+    //                 line_count += 1;
+    //                 char_count += 1
+    //             }
+    //             Some(_) => char_count += 1,
+    //             None => break,
+    //         }
+    //     }
 
-        if line_count == line_num {
-            Some(char_count)
-        } else {
-            None
-        }
-    }
+    //     if line_count == line_num {
+    //         Some(char_count)
+    //     } else {
+    //         None
+    //     }
+    // }
 
+    #[cfg(test)]
     pub fn chars(&'_ self) -> char_iter::GapBufferChars<'_> {
         char_iter::GapBufferChars::new(self.slice(..), 0, self.len())
     }
