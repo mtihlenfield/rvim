@@ -6,7 +6,7 @@ use std::iter::Rev;
 
 #[derive(Debug, Clone)]
 pub struct Cursor {
-    pub index: usize,
+    index: usize,
     preffered_col: usize,
 }
 
@@ -122,10 +122,6 @@ impl Buffer {
         self.buf.chars_at(index)
     }
 
-    // pub fn chars_at_rev(&'_ self, index: usize) -> Rev<BufferChars<'_>> {
-    //     self.buf.chars_at_rev(index)
-    // }
-
     pub fn line_start(&self, index: usize) -> usize {
         self.buf.line_start(index)
     }
@@ -134,30 +130,9 @@ impl Buffer {
         self.buf.line_end(index)
     }
 
-    // pub fn line_length(&self, start_index: usize) -> usize {
-    //     self.buf.line_length(start_index)
-    // }
-
-    // pub fn lines_at(&'_ self, line_num: usize) -> Option<BufferLines<'_>> {
-    //     self.buf.lines_at(line_num)
-    // }
-
-    // pub fn lines_at_char(&'_ self, index: usize) -> BufferLines<'_> {
-    //     self.buf.lines_at_char(index)
-    // }
-
     pub fn lines_at_char_rev(&'_ self, index: usize) -> Rev<BufferLines<'_>> {
         self.buf.lines_at_char_rev(index)
     }
-
-    // pub fn lines_at_rev(&'_ self, line_num: usize) -> Option<Rev<BufferLines<'_>>> {
-    //     self.buf.lines_at_rev(line_num)
-    // }
-    //
-
-    // pub fn find_next(&'_ self, start: usize, search_char: char) -> Option<usize> {
-    //     self.buf.find_next(start, search_char)
-    // }
 
     pub fn cursor_index(&self) -> usize {
         return self.cursor.index;

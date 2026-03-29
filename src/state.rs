@@ -170,6 +170,9 @@ impl EditorState {
     }
 
     fn execute_command(&mut self) -> bool {
+        // TODO: need to handle errors:
+        // - No file name
+        // - invalid command
         false
     }
 
