@@ -91,10 +91,6 @@ impl BufferView {
             total_screen_lines += screen_lines;
         }
 
-        // TODO: it looks like this goes one past the end of the buffer, but it doesn't: all my
-        // files just have trailing newlines. But traditionally editors don't show that trailing
-        // newline, so I should figure out how to get rid of it. The change may need to be in
-        // update
         self.anchor = offset;
     }
 
@@ -103,7 +99,6 @@ impl BufferView {
         screen_buf: &mut ScreenBuf,
         buffer_state: &buffer::Buffer,
     ) -> std::io::Result<()> {
-        info!("Cursor: {}", buffer_state.cursor_index());
         let max_col = screen_buf.cols - 1;
         // preserve the last row for the status line
         let max_row = screen_buf.rows - 2;
@@ -185,11 +180,15 @@ impl BufferView {
     }
 }
 
-struct StatusView {}
+struct StatusView {
+    cursor: Position,
+}
 
 impl StatusView {
     pub fn new() -> StatusView {
-        StatusView {}
+        StatusView {
+            cursor: Position::new(),
+        }
     }
 
     pub fn update(
@@ -198,8 +197,20 @@ impl StatusView {
         new_state: &state::EditorState,
     ) -> std::io::Result<()> {
         let mode_str = match new_state.mode {
-            state::Mode::Insert => "-- INSERT --",
-            state::Mode::Normal => "-- NORMAL --",
+            state::Mode::Insert => "-- INSERT --".to_string(),
+            state::Mode::Normal => "-- NORMAL --".to_string(),
+            state::Mode::Command => format!(":{}", new_state.command.as_string()),
+        };
+
+        self.cursor = if new_state.mode == state::Mode::Command {
+            Position {
+                row: (screen_buf.rows - 1).into(),
+                // NOTE: not bothering with command wraparound right now. Don't have commands
+                // longer than 2 chars right now
+                col: mode_str.len(),
+            }
+        } else {
+            Position::new()
         };
 
         for (i, c) in mode_str.chars().enumerate() {
@@ -303,13 +314,11 @@ impl Screen {
             .update(&mut self.screen_buf, &new_state.buffer)?;
         self.status_view.update(&mut self.screen_buf, new_state)?;
         self.screen_buf.flush(&mut out)?;
-        // TODO: when we have command mode, we will have to handle it something like this
-        // let cursor = match new_state.mode {
-        //     state::Mode::Insert | state::Mode::Normal => self.buffer_view.cursor.clone(),
-        //     _ => Position::new(),
-        // };
+        let cursor = match new_state.mode {
+            state::Mode::Insert | state::Mode::Normal => self.buffer_view.cursor.clone(),
+            state::Mode::Command => self.status_view.cursor.clone(),
+        };
 
-        let cursor = self.buffer_view.cursor.clone();
         out.queue(cursor::MoveTo(cursor.col as u16, cursor.row as u16))?;
 
         out.flush()

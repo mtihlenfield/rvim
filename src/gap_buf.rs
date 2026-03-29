@@ -232,7 +232,6 @@ impl GapBuffer {
     //     }
     // }
 
-    #[cfg(test)]
     pub fn chars(&'_ self) -> char_iter::GapBufferChars<'_> {
         char_iter::GapBufferChars::new(self.slice(..), 0, self.len())
     }
