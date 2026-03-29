@@ -128,14 +128,21 @@ impl BufferView {
             }
 
             if ch == '\n' {
-                // TODO: if we enter insert mode by hitting `a`, this could put the cursor at a \n.
-                // In that case we want the cursor one past the end of the line instead of at 0. If
-                // we do that, we also have to consider that we might need to wrap around
-                col = 0;
                 if offset == cursor_offset {
                     cursor_set = true;
-                    self.set_cursor(row, col);
+                    // if we enter insert mode by hitting `a`, this could put the cursor at a \n.
+                    // In that case we want the cursor one past the end of the line instead of at
+                    // 0. If the previous char was not a \n, then we know we are in append mode
+                    let cursor_col =
+                        if buffer_state.get(cursor_offset.saturating_sub(1)) != Some('\n') {
+                            col + 1
+                        } else {
+                            0
+                        };
+                    self.set_cursor(row, cursor_col);
                 }
+
+                col = 0;
                 row += 1;
                 continue;
             }

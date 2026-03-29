@@ -114,7 +114,6 @@ impl Buffer {
         }
     }
 
-    #[cfg(test)]
     pub fn get(&self, index: usize) -> Option<char> {
         self.buf.get(index)
     }
@@ -209,6 +208,10 @@ impl Buffer {
             return;
         }
 
+        // There is one sort of odd case we are covering here: Apparently it is a posix standard that all
+        // text files end in a \n. Text editors do not usually *show* this line, so you shouldn't
+        // have your cursor on it visually, but you could have your cursor on it in append mode.
+        // And in that case you just want to move left.
         self.cursor.left();
     }
 
@@ -578,11 +581,10 @@ mod tests {
         assert_eq!(buff.cursor.preffered_col, 4);
 
         // Same thing as above, but with a trailing new line.
-        // TODO: what IS the correct way to handle this?
         buff.cursor.jump(19, 7);
         buff.move_left();
-        assert_cursor!(&buff, 19, 'e');
-        assert_eq!(buff.cursor.preffered_col, 7);
+        assert_cursor!(&buff, 18, 'e');
+        assert_eq!(buff.cursor.preffered_col, 6);
     }
 
     #[test]
