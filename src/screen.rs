@@ -123,7 +123,6 @@ impl BufferView {
         let mut row: u16 = 0;
         let mut col: u16 = 0;
         for (offset, ch) in buffer_state.chars_at(self.anchor).enumerate() {
-            // preserve the last row for the status line
             if row > max_row {
                 break;
             }

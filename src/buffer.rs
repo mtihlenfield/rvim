@@ -197,17 +197,15 @@ impl Buffer {
         if self.cursor.index == 0 {
             return;
         }
+
         if self.cursor.index == self.buf.len() {
-            // We're transition from insert to normal mode and the cursor is  +1, so we have to
+            // We're transition from insert to normal mode and the cursor is invalid (by 1), so we have to
             // decrease it no matter what.
-            // TODO: this still isn't working quite right - doesn't handle trailing newline
-            // correctly
             self.cursor.left();
+            return;
         }
 
         if self.buf.get(self.cursor.index - 1) == Some('\n') {
-            // TODO: this doesn't not handle the case where we are switching back from insert mode
-            // and the cursor == buffer.len()
             return;
         }
 
@@ -492,6 +490,7 @@ mod tests {
     }
 
     // --- move right tests ---
+
     #[test]
     fn test_move_right_normal() {
         let mut buff = Buffer::from_string("hello");
@@ -542,5 +541,66 @@ mod tests {
         assert_eq!(buff.cursor.index, 5);
         assert_eq!(buff.get(buff.cursor.index), None);
         assert_eq!(buff.cursor.preffered_col, 5);
+    }
+
+    // --- move left tests ---
+
+    #[test]
+    fn test_move_left_normal() {
+        let mut buff = Buffer::from_string("hello");
+        buff.cursor.jump(2, 2);
+        buff.move_left();
+        assert_cursor!(&buff, 1, 'e');
+        assert_eq!(buff.cursor.preffered_col, 1);
+    }
+
+    #[test]
+    fn test_move_left_start_of_line() {
+        let mut buff = Buffer::from_string("hello\nworld");
+        buff.cursor.jump(6, 0);
+        buff.move_left();
+        assert_cursor!(&buff, 6, 'w');
+        assert_eq!(buff.cursor.preffered_col, 0);
+
+        buff.cursor.jump(0, 0);
+        buff.move_left();
+        assert_cursor!(&buff, 0, 'h');
+        assert_eq!(buff.cursor.preffered_col, 0);
+    }
+
+    #[test]
+    fn test_move_left_end_of_line() {
+        // test moving left with cursor that is on a \n that is not an empty line
+        let mut buff = Buffer::from_string("hello\nworld\ngoodbye\n");
+        buff.cursor.jump(11, 5);
+        buff.move_left();
+        assert_cursor!(&buff, 10, 'd');
+        assert_eq!(buff.cursor.preffered_col, 4);
+
+        // Same thing as above, but with a trailing new line.
+        // TODO: what IS the correct way to handle this?
+        buff.cursor.jump(19, 7);
+        buff.move_left();
+        assert_cursor!(&buff, 19, 'e');
+        assert_eq!(buff.cursor.preffered_col, 7);
+    }
+
+    #[test]
+    fn test_move_left_empty_line() {
+        let mut buff = Buffer::from_string("hello\n\nworld");
+        buff.cursor.jump(6, 0);
+        buff.move_left();
+        assert_cursor!(&buff, 6, '\n');
+        assert_eq!(buff.cursor.preffered_col, 0);
+    }
+
+    #[test]
+    fn test_move_left_eof() {
+        let mut buff = Buffer::from_string("hello");
+        // The cursor can end up past the end of the buffer if we are in insert (append) mode.
+        buff.cursor.jump(5, 5);
+        buff.move_left();
+        assert_cursor!(&buff, 4, 'o');
+        assert_eq!(buff.cursor.preffered_col, 4);
     }
 }
