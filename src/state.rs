@@ -14,6 +14,7 @@ pub enum Mode {
 pub struct Command {
     buff: gap_buf::GapBuffer,
     cursor_index: usize,
+    is_error: bool,
 }
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ impl Command {
         Command {
             buff: gap_buf::GapBuffer::new(),
             cursor_index: 0,
+            is_error: false,
         }
     }
 
@@ -47,6 +49,23 @@ impl Command {
             Err(gap_buf::GapBufferError::DeleteFromStart) => Ok(()),
             Err(e) => Err(CommandError(e.to_string())),
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.buff = gap_buf::GapBuffer::new();
+        self.cursor_index = 0;
+    }
+
+    pub fn clear_error(&mut self) {
+        if self.is_error {
+            self.is_error = false;
+            self.clear();
+        }
+    }
+
+    pub fn set_error(&mut self, msg: &str) {
+        self.buff = msg.into();
+        self.is_error = true;
     }
 }
 
@@ -74,7 +93,6 @@ impl EditorState {
     fn handle_normal_update(&mut self, key_ev: event::KeyEvent) -> bool {
         match key_ev.code {
             event::KeyCode::Char(c) => match c {
-                'q' => true,
                 'i' => {
                     self.mode = Mode::Insert;
                     info!("Switching to Insert mode.");
@@ -170,13 +188,27 @@ impl EditorState {
     }
 
     fn execute_command(&mut self) -> bool {
-        // TODO: need to handle errors:
-        // - No file name
-        // - invalid command
-        false
+        match self.command.as_string().as_str() {
+            "q" => true,
+            "w" => {
+                self.command.clear();
+                false
+            }
+            _ => {
+                self.command.set_error(
+                    format!("Not an editor command: {}", self.command.as_string(),).as_str(),
+                );
+                false
+            }
+        }
+    }
+
+    pub fn has_error(&self) -> bool {
+        self.command.is_error
     }
 
     pub fn update(&mut self, key_ev: event::KeyEvent) -> bool {
+        self.command.clear_error();
         match self.mode {
             Mode::Normal => self.handle_normal_update(key_ev),
             Mode::Insert => self.handle_insert_update(key_ev),

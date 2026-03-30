@@ -198,7 +198,13 @@ impl StatusView {
     ) -> std::io::Result<()> {
         let mode_str = match new_state.mode {
             state::Mode::Insert => "-- INSERT --".to_string(),
-            state::Mode::Normal => "-- NORMAL --".to_string(),
+            state::Mode::Normal => {
+                if new_state.has_error() {
+                    new_state.command.as_string()
+                } else {
+                    "-- NORMAL --".to_string()
+                }
+            }
             state::Mode::Command => format!(":{}", new_state.command.as_string()),
         };
 
