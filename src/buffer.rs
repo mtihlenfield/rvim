@@ -2,6 +2,7 @@ use crate::char_iter;
 use crate::gap_buf;
 use crate::line_iter;
 use crate::slice;
+use std::io::Write;
 use std::iter::Rev;
 
 #[derive(Debug, Clone)]
@@ -57,9 +58,33 @@ pub type BufferSlice<'a> = slice::GapBufferSlice<'a>;
 #[derive(Debug)]
 pub struct BufferError(pub String);
 
+#[derive(Debug)]
+pub enum SaveError {
+    NoFileName,
+    IOError(std::io::Error),
+}
+
+impl std::fmt::Display for SaveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SaveError::NoFileName => write!(f, "No file name."),
+            SaveError::IOError(e) => write!(f, "{}", e.to_string()),
+        };
+
+        Ok(())
+    }
+}
+
+impl From<std::io::Error> for SaveError {
+    fn from(err: std::io::Error) -> SaveError {
+        SaveError::IOError(err)
+    }
+}
+
 pub struct Buffer {
     buf: gap_buf::GapBuffer,
     cursor: Cursor,
+    path: Option<String>,
 }
 
 impl Buffer {
@@ -67,6 +92,7 @@ impl Buffer {
         Buffer {
             buf: gap_buf::GapBuffer::new(),
             cursor: Cursor::new(),
+            path: None,
         }
     }
 
@@ -75,6 +101,7 @@ impl Buffer {
         let buf = Buffer {
             buf: s.as_str().into(),
             cursor: Cursor::new(),
+            path: Some(path.to_string()),
         };
 
         Ok(buf)
@@ -85,7 +112,24 @@ impl Buffer {
         Buffer {
             buf: s.into(),
             cursor: Cursor::new(),
+            path: None,
         }
+    }
+
+    pub fn save(&mut self, path: Option<&str>) -> Result<(), SaveError> {
+        let output_path = if let Some(p) = path {
+            self.path = Some(p.to_string());
+            p
+        } else if let Some(p) = &self.path {
+            p
+        } else {
+            return Err(SaveError::NoFileName);
+        };
+
+        let mut file = std::fs::File::create(output_path)?;
+        write!(file, "{}", self.buf)?;
+
+        Ok(())
     }
 
     pub fn is_empty(&self) -> bool {

@@ -188,18 +188,30 @@ impl EditorState {
     }
 
     fn execute_command(&mut self) -> bool {
-        match self.command.as_string().as_str() {
-            "q" => true,
-            "w" => {
-                self.command.clear();
+        let cmd = self.command.as_string();
+        if cmd.len() == 0 {
+            return false;
+        }
+
+        let mut args = cmd.split_whitespace();
+
+        match args.next() {
+            Some(s) if s == "q" => true,
+            Some(s) if s == "w" => {
+                if let Err(e) = self.buffer.save(args.next()) {
+                    self.command.set_error(&e.to_string());
+                } else {
+                    self.command.clear();
+                }
                 false
             }
-            _ => {
+            Some(_) => {
                 self.command.set_error(
-                    format!("Not an editor command: {}", self.command.as_string(),).as_str(),
+                    format!("Not an editor command: {}", self.command.as_string()).as_str(),
                 );
                 false
             }
+            None => false,
         }
     }
 
