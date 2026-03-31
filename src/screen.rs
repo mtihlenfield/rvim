@@ -142,6 +142,9 @@ impl BufferView {
                 continue;
             }
 
+            // TODO: this *should* be col > max_col. Right now with >= we wrap around one char too
+            // early. However using > exposes a cursor bug which causes it to not wrap around
+            // correctly. So I'm leaving >= until I fix the cursor bug.
             if col >= max_col {
                 if row == max_row {
                     // We can't display the whole line, so we won't display an of it.
