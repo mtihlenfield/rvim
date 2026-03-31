@@ -5,6 +5,9 @@ use crate::slice;
 use std::io::Write;
 use std::iter::Rev;
 
+// TODO: could Cursor be better represented as enum? Is there a way that I could disallow invalid
+// states with types? Like do have an append mode that allows the cursor to be one past the buffer
+// end?
 #[derive(Debug, Clone)]
 pub struct Cursor {
     index: usize,

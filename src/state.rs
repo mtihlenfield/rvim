@@ -11,6 +11,10 @@ pub enum Mode {
     Command,
 }
 
+// TODO: consider making CommandState an enum with different values:
+// - Empty
+// - Error(msg)
+// - Command(buff, cursor)
 pub struct Command {
     buff: gap_buf::GapBuffer,
     cursor_index: usize,

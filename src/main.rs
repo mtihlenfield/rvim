@@ -4,6 +4,7 @@ use log::{error, info};
 use log4rs;
 use std::env;
 
+// TODO: I know I'm not using the module system as intended... probably need to break out some libs
 mod buffer;
 mod char_iter;
 mod gap_buf;
@@ -37,6 +38,9 @@ fn main() {
     screen.update(&state).expect("Failed to init screen.");
 
     loop {
+        // TODO: updating on every keypress seems to be non-standard, but it's working pretty well
+        // for me... I'll probably keep it this way until I look in to using async for io (like
+        // keypresses)
         let ev = event::read().expect("Failed to read event.");
         match ev {
             event::Event::Key(key_event) => {

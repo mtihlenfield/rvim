@@ -230,6 +230,9 @@ impl StatusView {
     }
 }
 
+// TODO: would be nice to be able to take a slice of a screen buf and pass it to a view obj instead
+// of the whole buffer. Then the view object doesn't need to worry about taking up screen
+// real-estate that doesn't belong to it - it only knows about it's own slice of the screen.
 struct ScreenBuf {
     rows: u16,
     cols: u16,
