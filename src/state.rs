@@ -108,6 +108,11 @@ impl EditorState {
                     info!("Switching to Insert mode.");
                     false
                 }
+                'x' => {
+                    // TODO: implement normal mode delete. This deletes the wrong char
+                    self.buffer.delete().unwrap();
+                    false
+                }
                 'l' => {
                     self.buffer.move_right(false);
                     false
